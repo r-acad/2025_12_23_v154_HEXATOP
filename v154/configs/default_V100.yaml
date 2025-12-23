@@ -1,0 +1,157 @@
+# ==============================================================================
+# HEXA TOPOLOGY OPTIMIZATION - TESLA V100 (16GB) PROFILE
+# ==============================================================================
+
+# ------------------------------------------------------------------------------
+# 1. HARDWARE PROFILE
+# ------------------------------------------------------------------------------
+# "V100" enables Float64 (Double Precision) solver and optimized FP64 atomics.
+# This prevents convergence stagnation common in large meshes.
+gpu_profile: "V100"
+
+# ------------------------------------------------------------------------------
+# 2. RESTART CONFIGURATION
+# ------------------------------------------------------------------------------
+restart_configuration:
+  enable_restart: false
+  file_path: ""
+
+# ------------------------------------------------------------------------------
+# 3. GEOMETRY DEFINITION
+# ------------------------------------------------------------------------------
+geometry:
+  length_x: 60
+  length_y: 20
+  length_z: 20
+  
+  # Target 5.0 Million elements.
+  # This fits comfortably in 16GB VRAM using Float64 + Multigrid.
+  target_elem_count: 25_000_000
+  
+  sphere1: {type: sphere, center: [12.51, 28.49, 50], diameter: 8, stiffness_ratio: 0}
+  sphere2: {type: sphere, center: [60.38, -0.07, 50], diameter: 4, stiffness_ratio: 10}
+  sphere3: {type: sphere, center: [34.29, 5, 50], diameter: 4, stiffness_ratio: -10}
+  box1:    {type: box, center: [28, 15, 50], size: [1, 2, 3], stiffness_ratio: 5}
+  box2:    {type: box, center: [45.06, 8.95, 50], size: [1, 4, 2], stiffness_ratio: 0}
+
+# ------------------------------------------------------------------------------
+# 4. BOUNDARY CONDITIONS
+# ------------------------------------------------------------------------------
+boundary_conditions:
+  - location: [0, ':', ':']
+    DoFs: [1, 2, 3]
+
+# ------------------------------------------------------------------------------
+# 5. EXTERNAL FORCES
+# ------------------------------------------------------------------------------
+external_forces:
+  - {name: Y10, location: [100%, 0, 0], F: [0, 10, 0]}
+  - {name: Z-10, location: [100%, 0, 50%], F: [0, 0, -10]}
+  - {name: Y20, location: [100%, 0, 100%], F: [0, 20, 0]}
+  - {name: Mid_Y20, location: [50%, 0, 50%], F: [0, 15, 0]}
+
+# ------------------------------------------------------------------------------
+# 6. MATERIAL PROPERTIES
+# ------------------------------------------------------------------------------
+material:
+  E: 1
+  nu: 0.3
+  material_density: 0.001
+  gravity_acceleration: 0.0
+  delta_temperature: 0.0
+
+# ------------------------------------------------------------------------------
+# 7. OPTIMIZATION SETTINGS
+# ------------------------------------------------------------------------------
+number_of_iterations: 50
+hard_stop_after_iteration: 100
+l1_stress_allowable: 2
+
+optimization_parameters:
+  density_update_method: "hard"
+  min_density: 0.0001
+  density_clamp_max: 1.0
+  final_density_threshold: 0.98
+  
+  # ============================================================================
+  # MESH INDEPENDENT FEATURE SIZE (PHYSICAL LOCKING)
+  # ============================================================================
+  # 1. Feature Size Definition
+  #    d_min = MAX( physical_target, stability_floor * dx )
+  
+  # Target Physical Size (Meters):
+  # Enforce struts to be at least 0.5m thick, regardless of mesh size.
+  minimum_feature_size_physical: 0.5
+
+  # Stability Floor (Elements):
+  # Never allow filter < 2.0 elements (prevents checkerboarding).
+  minimum_feature_size_elements: 2.0
+
+  # 2. Radius Schedule (Hyperbolic Decay)
+  # These multipliers apply to the effective d_min calculated above.
+  radius_max_multiplier: 4.0      # Start smooth (Radius = 4 * 0.5m = 2.0m)
+  radius_min_multiplier: 0.5      # End sharp (Radius = 0.5 * 0.5m = 0.25m)
+  radius_decay_exponent: 1.8
+
+  # 3. Constraint Coupling
+  constraint_constant: 0.25
+  max_culling_ratio: 0.20         # Conservative culling for high-res mesh
+
+# ------------------------------------------------------------------------------
+# 8. SOLVER PARAMETERS (Tuned for V100/Float64)
+# ------------------------------------------------------------------------------
+solver_parameters:
+  solver_type: gpu
+  
+  # "multigrid" is fastest but uses more VRAM.
+  # If simulation crashes with OOM, switch to "jacobi".
+  preconditioner: "multigrid"
+  
+  # V100 Double Precision allows tighter tolerance.
+  tolerance: 1.0e-9
+  max_iterations: 40000
+  
+  diagonal_shift_factor: 1.0e-9
+  stagnation_tolerance: 1.0e-4
+  
+  # Robustness settings
+  max_shift_attempts: 5
+  shift_multiplier: 10.0
+  
+  gpu_method: krylov
+  krylov_solver: cg
+
+# ------------------------------------------------------------------------------
+# 9. GROWTH SETTINGS
+# ------------------------------------------------------------------------------
+growth_settings:
+  # Target 5 Million Active Elements (Safe limit for 16GB Float64+MG)
+  target_active_elements: 25_000_000
+  
+  max_growth_rate: 1.25
+  nominal_refinement_threshold: 0.75
+  
+  # High background limit (VRAM safety managed by target_active_elements)
+  max_background_elements: 200_000_000
+  gpu_solver_safety_factor: 0.95
+
+# ------------------------------------------------------------------------------
+# 10. OUTPUT SETTINGS
+# ------------------------------------------------------------------------------
+output_settings:
+  export_frequency: 2
+  save_bin_frequency: 5
+  save_STL_frequency: 5
+  save_VTK_frequency: 2
+  
+  save_principal_stress_vectors: no
+  log_filename: "v100_simulation_log.txt"
+  
+  iso_surface_threshold: 0.5
+  
+  # STL Optimization
+  stl_subdivision_level: 1        # Keep low (1) for 5M elements to save RAM
+  stl_smoothing_passes: 1
+  stl_mesh_smoothing_iters: 3
+  stl_target_triangle_count: 250000
+  maximum_cells_in_binary_output: 25_000_000

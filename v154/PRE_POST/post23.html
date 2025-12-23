@@ -1,0 +1,945 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Babylon.js FEM Visualizer</title>
+    <script src="https://cdn.babylonjs.com/babylon.js"></script>
+    <script src="https://cdn.babylonjs.com/gui/babylon.gui.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/js-yaml/4.1.0/js-yaml.min.js"></script>
+    <style>
+        html, body { width: 100%; height: 100%; margin: 0; padding: 0; overflow: hidden; }
+        #renderCanvas { width: 100%; height: 100%; touch-action: none; outline: none; }
+        
+        #uiPanel { position: absolute; top: 1.5rem; left: 1.5rem; z-index: 10; max-height: 90vh; overflow-y: auto; transition: opacity 0.3s ease, transform 0.3s ease; }
+        #uiPanel.hidden-panel { opacity: 0; pointer-events: none; transform: translateX(-20px); }
+        
+        #toggleBtn { position: absolute; top: 1.5rem; left: 1.5rem; z-index: 20; transition: all 0.3s; }
+        #toggleBtn.panel-open { top: 1rem; left: 1rem; transform: scale(0.8); opacity: 0.5; }
+        #toggleBtn.panel-open:hover { opacity: 1; }
+
+        #uiPanel::-webkit-scrollbar { width: 6px; }
+        #uiPanel::-webkit-scrollbar-thumb { background-color: rgba(156, 163, 175, 0.5); border-radius: 4px; }
+        
+        input[type=range] { height: 6px; border-radius: 5px; }
+        input[type=radio] { accent-color: #2563eb; }
+        
+        .control-btn:active { transform: scale(0.95); }
+        
+        /* Compact Button Grid Styles */
+        .action-btn { @apply block w-full text-center text-xs font-bold py-2 rounded cursor-pointer transition shadow-sm border flex flex-col items-center justify-center gap-1 h-16; }
+        .btn-folder { @apply bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100; }
+        .btn-files { @apply bg-slate-600 text-white border-slate-700 hover:bg-slate-700; }
+        .btn-config { @apply bg-purple-50 text-purple-700 border-purple-200 hover:bg-purple-100; }
+        
+        .section-label { @apply text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2 mt-1; }
+        
+        .tab-container { @apply flex border-b border-slate-200 mb-4 gap-2; }
+        .tab-btn { @apply px-3 py-2 text-xs font-bold cursor-pointer transition border rounded-t-md shadow-sm; }
+        .tab-active { @apply bg-blue-600 text-white border-blue-700; }
+        .tab-inactive { @apply bg-slate-100 text-slate-500 border-slate-200 hover:bg-slate-200; }
+
+        .mode-indicator { @apply inline-block px-2 py-1 text-xs font-bold rounded; }
+        .mode-config { @apply bg-purple-100 text-purple-700; }
+        .mode-simulation { @apply bg-blue-100 text-blue-700; }
+
+        /* Tree Editor Styles */
+        .tree-item { @apply ml-2 text-xs font-mono; }
+        .tree-key { @apply font-bold text-slate-600 mr-2; }
+        .tree-input { @apply border border-slate-300 rounded px-1 py-0.5 text-slate-700 w-24 bg-white focus:ring-1 focus:ring-blue-500 outline-none; }
+        .tree-block { @apply border-l-2 border-slate-200 pl-2 mt-1 mb-1; }
+        .tree-array-row { @apply flex gap-1 items-center mb-1 flex-wrap; }
+    </style>
+</head>
+<body class="bg-slate-900">
+
+    <canvas id="renderCanvas"></canvas>
+
+    <button id="toggleBtn" class="bg-white p-2 rounded-full shadow-lg text-slate-800 hover:text-blue-600 hover:scale-110 panel-open" title="Toggle UI">
+        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/>
+            <circle cx="12" cy="12" r="3"/>
+        </svg>
+    </button>
+
+    <div id="uiPanel" class="bg-white/95 backdrop-blur-md p-5 rounded-xl shadow-2xl w-96 border border-white/20">
+        <div class="flex items-center justify-between mb-4 pl-8"> 
+            <h1 class="text-lg font-bold text-slate-800 tracking-tight">FEM Visualizer <span class="text-blue-600">Pro</span></h1>
+            <div class="flex items-center gap-2">
+                <span id="modeIndicator" class="mode-indicator mode-simulation">Simulation</span>
+                <div class="h-2 w-2 rounded-full bg-red-500" id="connectionStatus" title="System Status"></div>
+            </div>
+        </div>
+        
+        <div class="tab-container">
+            <div id="tabView" class="tab-btn tab-active">Viewer</div>
+            <div id="tabInfo" class="tab-btn tab-inactive">Parameters</div>
+        </div>
+
+        <div id="contentView" class="space-y-5">
+            <div class="bg-slate-50 p-3 rounded-lg border border-slate-200">
+                <div class="section-label">1. Load Data</div>
+                <div class="text-[10px] text-slate-400 mb-2 leading-tight">Load config (.yaml) or simulation data (.bintop)</div>
+                
+                <div class="grid grid-cols-3 gap-2">
+                    <button id="btnTriggerConfig" class="action-btn btn-config" title="Load Config YAML">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
+                        <span class="text-[9px]">Config</span>
+                    </button>
+                    <input type="file" id="fileInputConfig" accept=".yaml,.yml" class="hidden"/>
+                    
+                    <button id="btnTriggerFolder" class="action-btn btn-folder" title="Load Folder">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
+                        <span class="text-[9px]">Folder</span>
+                    </button>
+                    <input type="file" id="fileInputFolder" webkitdirectory directory multiple class="hidden"/>
+
+                    <button id="btnTriggerFiles" class="action-btn btn-files" title="Load Files">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="12" y1="18" x2="12" y2="12"></line><line x1="9" y1="15" x2="15" y2="15"></line></svg>
+                        <span class="text-[9px]">Files</span>
+                    </button>
+                    <input type="file" id="fileInputSequence" accept=".bintop" multiple class="hidden"/>
+                </div>
+            </div>
+
+            <div id="animControls" class="hidden bg-slate-100 p-2 rounded-lg border border-slate-300 opacity-50 pointer-events-none transition-opacity">
+                <div class="flex justify-between items-center mb-2">
+                    <span class="text-xs font-bold text-slate-600 uppercase">Animation</span>
+                    <span id="frameCounter" class="text-xs font-mono text-blue-600 font-bold">0 / 0</span>
+                </div>
+                
+                <div class="flex justify-center gap-2 mb-2">
+                    <button id="btnFirst" class="control-btn p-1.5 bg-white border border-slate-300 rounded hover:bg-slate-50 text-slate-700"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="19 20 9 12 19 4 19 20"></polygon><line x1="5" y1="19" x2="5" y2="5"></line></svg></button>
+                    <button id="btnPrev" class="control-btn p-1.5 bg-white border border-slate-300 rounded hover:bg-slate-50 text-slate-700"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="19 20 9 12 19 4 19 20"></polygon></svg></button>
+                    <button id="btnPlay" class="control-btn p-1.5 bg-blue-600 border border-blue-700 rounded hover:bg-blue-700 text-white shadow-sm w-8 flex justify-center">
+                        <svg id="iconPlay" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+                        <svg id="iconPause" class="hidden" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect></svg>
+                    </button>
+                    <button id="btnNext" class="control-btn p-1.5 bg-white border border-slate-300 rounded hover:bg-slate-50 text-slate-700"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 4 15 12 5 20 5 4"></polygon></svg></button>
+                    <button id="btnLast" class="control-btn p-1.5 bg-white border border-slate-300 rounded hover:bg-slate-50 text-slate-700"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 4 15 12 5 20 5 4"></polygon><line x1="19" y1="5" x2="19" y2="19"></line></svg></button>
+                </div>
+
+                <div class="flex items-center gap-2">
+                    <label class="text-[10px] text-slate-500 font-medium whitespace-nowrap">Delay (ms)</label>
+                    <input type="number" id="frameDelay" value="50" min="0" step="10" class="w-full text-xs p-1 border border-slate-300 rounded text-center">
+                </div>
+            </div>
+
+            <div id="statsPanel" class="bg-slate-50 p-3 rounded-lg border border-slate-200 grid grid-cols-2 gap-y-2 text-xs">
+                <div class="text-slate-500 font-medium">Element Size:</div>
+                <div id="statElemSize" class="text-slate-800 font-mono text-right">-</div>
+                <div class="text-slate-500 font-medium">Total Elements:</div>
+                <div id="statTotal" class="text-slate-800 font-mono text-right">0</div>
+                <div class="text-slate-500 font-medium">Visible:</div>
+                <div id="statVisible" class="text-blue-600 font-mono font-bold text-right">0</div>
+            </div>
+
+            <div id="colorControls">
+                <label for="dataFieldSelect" class="block text-xs font-medium text-slate-700 mb-1">Color Field</label>
+                <select id="dataFieldSelect" class="block w-full rounded-md border-slate-300 bg-slate-50 text-slate-700 text-sm p-2 shadow-sm focus:border-blue-500 focus:ring-blue-500">
+                    <option value="density">Density</option>
+                    <option value="l1_stress">L1 Stress Norm (Heatmap)</option>
+                    <option value="ten_comp">Tension / Compression</option>
+                </select>
+            </div>
+
+            <div id="rangeControls" class="space-y-2">
+                <div class="flex justify-between items-center">
+                    <label class="block text-xs font-medium text-slate-700">Value Range (Abs)</label>
+                    <button id="autoRangeBtn" class="text-[10px] text-blue-600 hover:text-blue-800 font-bold uppercase">Auto</button>
+                </div>
+                <div class="flex gap-2">
+                    <input type="number" id="minVal" value="0.00" step="0.01" class="w-1/2 rounded-md border-slate-300 bg-slate-50 text-xs p-2 font-mono shadow-sm focus:ring-blue-500">
+                    <input type="number" id="maxVal" value="1.00" step="0.01" class="w-1/2 rounded-md border-slate-300 bg-slate-50 text-xs p-2 font-mono shadow-sm focus:ring-blue-500">
+                </div>
+                <button id="applyButton" class="w-full bg-slate-800 text-white text-xs font-bold py-2 px-4 rounded-md hover:bg-slate-700 transition shadow-sm">Update View</button>
+            </div>
+
+            <div id="densityControl">
+                <div class="flex justify-between items-center mb-1">
+                    <label for="densitySlider" class="text-xs font-medium text-slate-700">Density Cutoff</label>
+                    <span id="densityValue" class="text-xs font-mono text-blue-600 bg-blue-50 px-1 rounded">0.00</span>
+                </div>
+                <input type="range" id="densitySlider" min="0" max="1" value="0" step="0.01" class="w-full h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-blue-600">
+            </div>
+
+            <div class="bg-slate-50 p-3 rounded-lg border border-slate-200 space-y-3">
+                <label class="block text-xs font-bold text-slate-500 uppercase tracking-wider">Marker Sizes</label>
+                
+                <div>
+                    <div class="flex justify-between items-center mb-1">
+                        <label for="bcSizeSlider" class="text-xs font-medium text-yellow-600">BC Size</label>
+                        <span id="bcSizeValue" class="text-xs font-mono text-slate-600 bg-slate-100 px-1 rounded">1.0x</span>
+                    </div>
+                    <input type="range" id="bcSizeSlider" min="0.1" max="3" value="1.0" step="0.1" class="w-full h-1.5 bg-yellow-100 rounded-lg appearance-none cursor-pointer accent-yellow-500">
+                </div>
+                
+                <div>
+                    <div class="flex justify-between items-center mb-1">
+                        <label for="loadSizeSlider" class="text-xs font-medium text-red-600">Load Size</label>
+                        <span id="loadSizeValue" class="text-xs font-mono text-slate-600 bg-slate-100 px-1 rounded">1.0x</span>
+                    </div>
+                    <input type="range" id="loadSizeSlider" min="0.1" max="3" value="1.0" step="0.1" class="w-full h-1.5 bg-red-100 rounded-lg appearance-none cursor-pointer accent-red-500">
+                </div>
+
+                <div>
+                    <div class="flex justify-between items-center mb-1">
+                        <label for="textSizeSlider" class="text-xs font-medium text-slate-600">Text Size</label>
+                        <span id="textSizeValue" class="text-xs font-mono text-slate-600 bg-slate-100 px-1 rounded">1.0x</span>
+                    </div>
+                    <input type="range" id="textSizeSlider" min="0.1" max="3" value="1.0" step="0.1" class="w-full h-1.5 bg-slate-100 rounded-lg appearance-none cursor-pointer accent-slate-500">
+                </div>
+            </div>
+
+            <div class="bg-slate-50 p-3 rounded-lg border border-slate-200 space-y-3">
+                <label class="block text-xs font-bold text-slate-500 uppercase tracking-wider">Spatial Slicing</label>
+                <div class="space-y-1">
+                    <div class="flex justify-between text-xs">
+                        <span class="font-bold text-red-600">X Axis</span>
+                        <span id="valX" class="font-mono text-slate-600">0.00</span>
+                    </div>
+                    <input type="range" id="sliderX" class="w-full h-1.5 bg-red-100 rounded-lg appearance-none cursor-pointer accent-red-500">
+                    <div class="flex gap-3 text-[10px] text-slate-600">
+                        <label class="flex items-center cursor-pointer"><input type="radio" name="modeX" value="below" class="mr-1" checked> Keep Below</label>
+                        <label class="flex items-center cursor-pointer"><input type="radio" name="modeX" value="above" class="mr-1"> Keep Above</label>
+                    </div>
+                </div>
+                <div class="space-y-1 border-t border-slate-200 pt-2">
+                    <div class="flex justify-between text-xs">
+                        <span class="font-bold text-green-600">Y Axis</span>
+                        <span id="valY" class="font-mono text-slate-600">0.00</span>
+                    </div>
+                    <input type="range" id="sliderY" class="w-full h-1.5 bg-green-100 rounded-lg appearance-none cursor-pointer accent-green-500">
+                    <div class="flex gap-3 text-[10px] text-slate-600">
+                        <label class="flex items-center cursor-pointer"><input type="radio" name="modeY" value="below" class="mr-1" checked> Keep Below</label>
+                        <label class="flex items-center cursor-pointer"><input type="radio" name="modeY" value="above" class="mr-1"> Keep Above</label>
+                    </div>
+                </div>
+                <div class="space-y-1 border-t border-slate-200 pt-2">
+                    <div class="flex justify-between text-xs">
+                        <span class="font-bold text-blue-600">Z Axis</span>
+                        <span id="valZ" class="font-mono text-slate-600">0.00</span>
+                    </div>
+                    <input type="range" id="sliderZ" class="w-full h-1.5 bg-blue-100 rounded-lg appearance-none cursor-pointer accent-blue-500">
+                    <div class="flex gap-3 text-[10px] text-slate-600">
+                        <label class="flex items-center cursor-pointer"><input type="radio" name="modeZ" value="below" class="mr-1" checked> Keep Below</label>
+                        <label class="flex items-center cursor-pointer"><input type="radio" name="modeZ" value="above" class="mr-1"> Keep Above</label>
+                    </div>
+                </div>
+            </div>
+
+            <div class="border-t border-slate-200 pt-3 space-y-2">
+                <button id="btnTurntable" class="w-full bg-blue-50 hover:bg-blue-100 text-blue-600 text-xs font-bold py-2 px-4 rounded-md transition shadow-sm border border-blue-200 flex items-center justify-center gap-2">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
+                    <span>Rotate Camera</span>
+                </button>
+
+                <div class="space-y-1 mt-2">
+                    <label class="flex items-center space-x-2 cursor-pointer">
+                        <input type="checkbox" id="shadowToggle" class="rounded text-blue-600 focus:ring-blue-500 h-4 w-4">
+                        <span class="text-sm text-slate-700">Enable Shadows (Self-Shadowing)</span>
+                    </label>
+                    <label class="flex items-center space-x-2 cursor-pointer">
+                        <input type="checkbox" id="groundToggle" checked class="rounded text-blue-600 focus:ring-blue-500 h-4 w-4">
+                        <span class="text-sm text-slate-700">Show Ground Plane</span>
+                    </label>
+                    <label class="flex items-center space-x-2 cursor-pointer">
+                        <input type="checkbox" id="groundTranslucencyToggle" checked class="rounded text-blue-600 focus:ring-blue-500 h-4 w-4">
+                        <span class="text-sm text-slate-700">Ground Translucency</span>
+                    </label>
+                    <label class="flex items-center space-x-2 cursor-pointer">
+                        <input type="checkbox" id="mirrorToggle" checked class="rounded text-blue-600 focus:ring-blue-500 h-4 w-4">
+                        <span class="text-sm text-slate-700">Mirror Reflection</span>
+                    </label>
+                    <label class="flex items-center space-x-2 cursor-pointer">
+                        <input type="checkbox" id="backgroundToggle" class="rounded text-blue-600 focus:ring-blue-500 h-4 w-4">
+                        <span class="text-sm text-slate-700">White Background</span>
+                    </label>
+                    <label class="flex items-center space-x-2 cursor-pointer">
+                        <input type="checkbox" id="fogToggle" checked class="rounded text-blue-600 focus:ring-blue-500 h-4 w-4">
+                        <span class="text-sm text-slate-700">Enable Fog</span>
+                    </label>
+                    
+                    <div class="border-t border-slate-100 my-1 pt-1 space-y-1">
+                        <label class="flex items-center space-x-2 cursor-pointer">
+                            <input type="checkbox" id="bcToggle" checked class="rounded text-blue-600 focus:ring-blue-500 h-4 w-4">
+                            <span class="text-sm text-yellow-600 font-bold">Show Constraints</span>
+                        </label>
+                        <label class="flex items-center space-x-2 cursor-pointer">
+                            <input type="checkbox" id="loadToggle" checked class="rounded text-blue-600 focus:ring-blue-500 h-4 w-4">
+                            <span class="text-sm text-red-600 font-bold">Show Loads</span>
+                        </label>
+                        <label class="flex items-center space-x-2 cursor-pointer">
+                            <input type="checkbox" id="shapesToggle" checked class="rounded text-blue-600 focus:ring-blue-500 h-4 w-4">
+                            <span class="text-sm text-purple-600 font-bold">Show Shapes</span>
+                        </label>
+                        <label class="flex items-center space-x-2 cursor-pointer">
+                            <input type="checkbox" id="boxToggle" checked class="rounded text-blue-600 focus:ring-blue-500 h-4 w-4">
+                            <span class="text-sm text-cyan-600 font-bold">Show Bounds</span>
+                        </label>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="contentInfo" class="hidden h-full flex flex-col">
+            <div class="flex justify-between items-center mb-3">
+                <h3 class="text-xs font-bold text-slate-500 uppercase">Configuration Parameters</h3>
+                <button id="btnSaveConfig" class="bg-blue-600 hover:bg-blue-700 text-white text-[10px] font-bold py-1 px-3 rounded shadow-sm flex items-center gap-1">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline></svg>
+                    Save YAML
+                </button>
+            </div>
+            
+            <div id="simMetaData" class="text-xs text-slate-600 font-mono overflow-y-auto flex-1 pb-4">
+                <div class="bg-slate-50 p-2 rounded border">No Data Loaded</div>
+            </div>
+        </div>
+
+        <div id="status" class="text-xs text-slate-400 text-center italic mt-2">Waiting for input...</div>
+    </div>
+
+    <script>
+        // --- GLOBAL STATE ---
+        let currentMode = 'simulation'; // 'simulation' or 'config'
+        let configData = null; // Holds the editable data structure
+        let currentMetadata = null; 
+        let currentBounds = null;
+        let currentScaleFactor = 1.0;
+
+        // ... (Global References same as before) ...
+        const btnTriggerConfig = document.getElementById('btnTriggerConfig');
+        const fileInputConfig = document.getElementById('fileInputConfig');
+        const btnTriggerFolder = document.getElementById('btnTriggerFolder');
+        const fileInputFolder = document.getElementById('fileInputFolder');
+        const btnTriggerFiles = document.getElementById('btnTriggerFiles');
+        const fileInputSequence = document.getElementById('fileInputSequence');
+        const modeIndicator = document.getElementById('modeIndicator');
+        const tabView = document.getElementById('tabView');
+        const tabInfo = document.getElementById('tabInfo');
+        const contentView = document.getElementById('contentView');
+        const contentInfo = document.getElementById('contentInfo');
+        const simMetaData = document.getElementById('simMetaData');
+        const btnSaveConfig = document.getElementById('btnSaveConfig');
+        const canvas = document.getElementById('renderCanvas');
+        const dataFieldSelect = document.getElementById('dataFieldSelect');
+        const minInput = document.getElementById('minVal');
+        const maxInput = document.getElementById('maxVal');
+        const applyButton = document.getElementById('applyButton');
+        const autoRangeBtn = document.getElementById('autoRangeBtn');
+        const statusEl = document.getElementById('status');
+        const densitySlider = document.getElementById('densitySlider');
+        const densityValue = document.getElementById('densityValue');
+        const shadowToggle = document.getElementById('shadowToggle');
+        const bcToggle = document.getElementById('bcToggle');
+        const loadToggle = document.getElementById('loadToggle');
+        const shapesToggle = document.getElementById('shapesToggle');
+        const boxToggle = document.getElementById('boxToggle');
+        const groundToggle = document.getElementById('groundToggle');
+        const backgroundToggle = document.getElementById('backgroundToggle'); 
+        const fogToggle = document.getElementById('fogToggle');
+        const groundTranslucencyToggle = document.getElementById('groundTranslucencyToggle');
+        const mirrorToggle = document.getElementById('mirrorToggle');
+        const btnTurntable = document.getElementById('btnTurntable');
+        const statsPanel = document.getElementById('statsPanel');
+        const colorControls = document.getElementById('colorControls');
+        const rangeControls = document.getElementById('rangeControls');
+        const densityControl = document.getElementById('densityControl');
+        const bcSizeSlider = document.getElementById('bcSizeSlider');
+        const bcSizeValue = document.getElementById('bcSizeValue');
+        const loadSizeSlider = document.getElementById('loadSizeSlider');
+        const loadSizeValue = document.getElementById('loadSizeValue');
+        const textSizeSlider = document.getElementById('textSizeSlider');
+        const textSizeValue = document.getElementById('textSizeValue');
+        const animControls = document.getElementById('animControls');
+        const frameCounter = document.getElementById('frameCounter');
+        const btnFirst = document.getElementById('btnFirst');
+        const btnPrev = document.getElementById('btnPrev');
+        const btnPlay = document.getElementById('btnPlay');
+        const btnNext = document.getElementById('btnNext');
+        const btnLast = document.getElementById('btnLast');
+        const iconPlay = document.getElementById('iconPlay');
+        const iconPause = document.getElementById('iconPause');
+        const frameDelayInput = document.getElementById('frameDelay');
+        const uiPanel = document.getElementById('uiPanel');
+        const toggleBtn = document.getElementById('toggleBtn');
+        let uiVisible = true;
+        let bcSizeMultiplier = 1.0;
+        let loadSizeMultiplier = 1.0;
+        let textSizeMultiplier = 1.0;
+
+        // ... (Logic same as before, see initBabylon) ...
+        toggleBtn.addEventListener('click', () => {
+            uiVisible = !uiVisible;
+            if(uiVisible) { uiPanel.classList.remove('hidden-panel'); toggleBtn.classList.add('panel-open'); }
+            else { uiPanel.classList.add('hidden-panel'); toggleBtn.classList.remove('panel-open'); }
+        });
+
+        tabView.addEventListener('click', () => {
+            tabView.classList.replace('tab-inactive', 'tab-active'); tabInfo.classList.replace('tab-active', 'tab-inactive');
+            contentView.classList.remove('hidden'); contentInfo.classList.add('hidden'); contentInfo.classList.remove('flex');
+        });
+        tabInfo.addEventListener('click', () => {
+            tabInfo.classList.replace('tab-inactive', 'tab-active'); tabView.classList.replace('tab-active', 'tab-inactive');
+            contentInfo.classList.remove('hidden'); contentInfo.classList.add('flex'); contentView.classList.add('hidden');
+        });
+
+        const statElemSize = document.getElementById('statElemSize');
+        const statTotal = document.getElementById('statTotal');
+        const statVisible = document.getElementById('statVisible');
+
+        let engine, scene, camera;
+        let fileList = []; let currentFrameIndex = 0; let isPlaying = false; let animationTimeout = null; let isTurntableActive = false;
+        let elementCount = 0; let elemDx = 0.1, elemDy = 0.1, elemDz = 0.1;
+        let centroids = null; let dataDensity = null; let dataL1 = null;      
+        let currentField = 'density'; let currentMin = 0, currentMax = 1; let densityCutoff = 0.0;
+        let masterMesh = null; let matrixBuffer = null; let colorBuffer = null;
+        let shadowGenerator = null; let directionLight = null; let ground = null; let mirrorTexture = null;
+        let boundingBox = null; let domainBox = null;
+        let contextMeshes = [];
+        let globalMeshBounds = { minX:0, maxX:0, minY:0, maxY:0, minZ:0, maxZ:0 };
+        
+        // NEW GLOBALS FOR GIZMO LOGIC
+        let gizmoManager = null;
+        let meshToConfigMap = new Map();
+
+        function initBabylon() {
+            engine = new BABYLON.Engine(canvas, true);
+            scene = new BABYLON.Scene(engine);
+            scene.clearColor = new BABYLON.Color4(0.0, 0.0, 0.0, 1);
+            
+            // Ensure depth clearing for labels to always be on top
+            scene.setRenderingAutoClearDepthStencil(2, true, false, false);
+
+            scene.fogMode = BABYLON.Scene.FOGMODE_LINEAR;
+            scene.fogEnabled = fogToggle.checked;
+            scene.fogColor = new BABYLON.Color3(0, 0, 0); 
+            scene.fogStart = 100.0; scene.fogEnd = 500.0;
+            camera = new BABYLON.ArcRotateCamera("camera", -Math.PI / 4, Math.PI / 3, 50, BABYLON.Vector3.Zero(), scene);
+            camera.attachControl(canvas, true); camera.wheelPrecision = 20; camera.minZ = 0.1; camera.maxZ = 20000; 
+            const hemiLight = new BABYLON.HemisphericLight("hemiLight", new BABYLON.Vector3(0, 1, 0), scene); hemiLight.intensity = 0.7;
+            directionLight = new BABYLON.DirectionalLight("dirLight", new BABYLON.Vector3(-1, -2, -1), scene);
+            directionLight.position = new BABYLON.Vector3(50, 100, 50); directionLight.intensity = 1.0;
+            ground = BABYLON.MeshBuilder.CreateGround("ground", {width: 20000, height: 20000}, scene);
+            const groundMat = new BABYLON.StandardMaterial("groundMat", scene);
+            groundMat.diffuseColor = new BABYLON.Color3(0.0, 0.0, 0.0); 
+            groundMat.alpha = groundTranslucencyToggle.checked ? 0.3 : 1.0; 
+            groundMat.transparencyMode = BABYLON.Material.MATERIAL_ALPHABLEND;
+            mirrorTexture = new BABYLON.MirrorTexture("mirror", 1024, scene, true);
+            mirrorTexture.mirrorPlane = new BABYLON.Plane(0, -1, 0, -0.1); mirrorTexture.level = 0.6; mirrorTexture.adaptiveBlurKernel = 32; 
+            groundMat.reflectionTexture = mirrorTexture; groundMat.specularColor = new BABYLON.Color3(0.2, 0.2, 0.2); groundMat.specularPower = 128; 
+            ground.material = groundMat; ground.position.y = -0.1; ground.receiveShadows = true;
+            
+            // Initialize Gizmo Manager
+            gizmoManager = new BABYLON.GizmoManager(scene);
+            gizmoManager.positionGizmoEnabled = true;
+            gizmoManager.usePointerToAttachGizmos = false; // We do manual attach
+            gizmoManager.attachableMeshes = [];
+
+            // Updated Gizmo Logic for Real-Time UI Updates
+            gizmoManager.gizmos.positionGizmo.onDragObservable.add(() => {
+                const mesh = gizmoManager.gizmos.positionGizmo.attachedMesh;
+                if(mesh && meshToConfigMap.has(mesh.name) && configData && configData.geometry) {
+                    const key = meshToConfigMap.get(mesh.name);
+                    if (configData.geometry[key]) {
+                        // Calculate new values
+                        const newX = parseFloat(mesh.position.x.toFixed(2));
+                        const newY = parseFloat(mesh.position.y.toFixed(2));
+                        const newZ = parseFloat(mesh.position.z.toFixed(2));
+                        const newCenter = [newX, newY, newZ];
+                        
+                        // Update Data Object
+                        configData.geometry[key].center = newCenter;
+                        
+                        // Update UI Inputs directly using data-path selectors
+                        const pathBase = ['geometry', key, 'center'].join('-');
+                        const inputX = document.querySelector(`input[data-path="${pathBase}-0"]`);
+                        const inputY = document.querySelector(`input[data-path="${pathBase}-1"]`);
+                        const inputZ = document.querySelector(`input[data-path="${pathBase}-2"]`);
+                        
+                        if(inputX) inputX.value = newX;
+                        if(inputY) inputY.value = newY;
+                        if(inputZ) inputZ.value = newZ;
+                    }
+                }
+            });
+
+            // Pointer Down for Selection
+            scene.onPointerDown = function(evt, pickResult) {
+                if (pickResult.hit && pickResult.pickedMesh) {
+                    const mesh = pickResult.pickedMesh;
+                    // Check if it's one of our geometry shapes (Blue/Red)
+                    if (mesh.metadata && mesh.metadata.type === "shape" && meshToConfigMap.has(mesh.name)) {
+                        gizmoManager.attachToMesh(mesh);
+                    } else if (mesh.name === "ground" || mesh.name === "boundingBox" || mesh.name === "domainBox") {
+                        // Deselect if clicking environment
+                        gizmoManager.attachToMesh(null);
+                    }
+                } else {
+                    gizmoManager.attachToMesh(null);
+                }
+            };
+
+            engine.runRenderLoop(() => { if (isTurntableActive) { camera.alpha += 0.005; } scene.render(); });
+            window.addEventListener('resize', () => engine.resize());
+            document.getElementById('connectionStatus').classList.replace('bg-red-500', 'bg-green-500');
+        }
+
+        function switchToMode(mode) {
+            currentMode = mode;
+            if (mode === 'config') {
+                modeIndicator.textContent = 'Config'; modeIndicator.classList.remove('mode-simulation'); modeIndicator.classList.add('mode-config');
+                statsPanel.style.display = 'none'; colorControls.style.display = 'none'; rangeControls.style.display = 'none'; densityControl.style.display = 'none'; animControls.classList.add('hidden');
+            } else {
+                modeIndicator.textContent = 'Simulation'; modeIndicator.classList.remove('mode-config'); modeIndicator.classList.add('mode-simulation');
+                statsPanel.style.display = 'grid'; colorControls.style.display = 'block'; rangeControls.style.display = 'block'; densityControl.style.display = 'block';
+            }
+        }
+
+        btnTriggerConfig.addEventListener('click', () => { fileInputConfig.click(); });
+        fileInputConfig.addEventListener('change', (e) => {
+            const file = e.target.files[0]; if (!file) return;
+            const reader = new FileReader();
+            reader.onload = (evt) => {
+                try { configData = jsyaml.load(evt.target.result); processConfigFile(configData); switchToMode('config'); statusEl.textContent = `Config loaded: ${file.name}`; } 
+                catch (err) { statusEl.textContent = `Error parsing YAML: ${err.message}`; console.error(err); }
+            };
+            reader.readAsText(file);
+        });
+
+        // === TRANSFORM AND SAVE YAML ===
+        function transformConfigForSave(obj) {
+            if (Array.isArray(obj)) {
+                // If it is a short array (vector), flatten to a string representation
+                // Checks for length 3 or 4 and primitive types
+                if (obj.length >= 2 && obj.length <= 4 && obj.every(x => typeof x !== 'object' || x === null)) {
+                    return `[${obj.join(', ')}]`;
+                }
+                return obj.map(transformConfigForSave);
+            } else if (typeof obj === 'object' && obj !== null) {
+                const newObj = {};
+                for (const key in obj) {
+                    newObj[key] = transformConfigForSave(obj[key]);
+                }
+                return newObj;
+            }
+            return obj;
+        }
+
+        btnSaveConfig.addEventListener('click', () => {
+            if(!configData) { alert("No editable configuration data loaded."); return; }
+            try {
+                // 1. Create a deep clone with vectors converted to strings
+                const exportData = transformConfigForSave(configData);
+                
+                // 2. Dump to YAML. lineWidth -1 encourages long lines.
+                let yamlStr = jsyaml.dump(exportData, { lineWidth: -1 });
+                
+                // 3. Post-process to remove quotes around the "[...]" strings
+                // This converts ' "[1, 2, 3]" ' back to ' [1, 2, 3] ' (Flow style sequence)
+                yamlStr = yamlStr.replace(/'\[(.*?)\]'/g, "[$1]");
+                // Handle double quotes case just in case
+                yamlStr = yamlStr.replace(/"\[(.*?)\]"/g, "[$1]");
+
+                const blob = new Blob([yamlStr], {type: "text/yaml"});
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement("a");
+                a.href = url; a.download = "config_modified.yaml";
+                document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
+                statusEl.textContent = "Configuration saved.";
+            } catch(e) { console.error("Save failed", e); statusEl.textContent = "Error saving file."; }
+        });
+
+        function updateFog(maxDim) { const start = maxDim * 3.0; const end = maxDim * 8.0; scene.fogStart = start; scene.fogEnd = end; }
+
+        function processConfigFile(config) {
+            clearScene(); configData = config;
+            const geom = config.geometry || {};
+            const lenX = geom.length_x || 60; const lenY = geom.length_y || 20; const lenZ = geom.length_z || 20;
+            globalMeshBounds = { minX: 0, maxX: lenX, minY: 0, maxY: lenY, minZ: 0, maxZ: lenZ };
+            currentBounds = globalMeshBounds;
+            const maxDim = Math.max(lenX, lenY, lenZ); currentScaleFactor = maxDim * 0.15;
+            updateFog(maxDim); createDomainBox(lenX, lenY, lenZ);
+            setupSlider(sliderX, valX, 0, lenX, 'x'); setupSlider(sliderY, valY, 0, lenY, 'y'); setupSlider(sliderZ, valZ, 0, lenZ, 'z');
+            const cx = lenX / 2, cy = lenY / 2, cz = lenZ / 2;
+            camera.setTarget(new BABYLON.Vector3(cx, cy, cz)); camera.radius = maxDim * 1.5;
+            const meta = { geometry: geom, bcs: config.boundary_conditions || [], loads: config.external_forces || [] };
+            currentMetadata = meta;
+            renderContextMeshes(meta, scene, currentScaleFactor, globalMeshBounds);
+            updateEditableTree(config); 
+        }
+
+        function createDomainBox(lenX, lenY, lenZ) {
+            if (domainBox) { domainBox.dispose(); domainBox = null; }
+            domainBox = BABYLON.MeshBuilder.CreateBox("domainBox", { width: lenX, height: lenY, depth: lenZ }, scene);
+            domainBox.position = new BABYLON.Vector3(lenX/2, lenY/2, lenZ/2);
+            const boxMat = new BABYLON.StandardMaterial("domainBoxMat", scene);
+            boxMat.diffuseColor = new BABYLON.Color3(0, 1, 1); boxMat.alpha = 0.1; boxMat.wireframe = true; boxMat.backFaceCulling = false;
+            domainBox.material = boxMat; domainBox.isPickable = false; domainBox.setEnabled(boxToggle.checked);
+        }
+
+        boxToggle.addEventListener('change', (e) => { if (domainBox) domainBox.setEnabled(e.target.checked); if (boundingBox) boundingBox.setEnabled(e.target.checked); });
+
+        function clearScene() {
+            if (gizmoManager) gizmoManager.attachToMesh(null);
+            meshToConfigMap.clear();
+            if (masterMesh) { if(shadowGenerator) shadowGenerator.removeShadowCaster(masterMesh); masterMesh.dispose(); masterMesh = null; }
+            if (boundingBox) { boundingBox.dispose(); boundingBox = null; } if (domainBox) { domainBox.dispose(); domainBox = null; }
+            contextMeshes.forEach(m => m.dispose()); contextMeshes = [];
+            centroids = null; dataDensity = null; dataL1 = null; elementCount = 0;
+        }
+
+        btnTriggerFolder.addEventListener('click', () => { fileInputFolder.click(); });
+        btnTriggerFiles.addEventListener('click', () => { fileInputSequence.click(); });
+
+        function handleSequenceFiles(rawFiles) {
+            if (!rawFiles || rawFiles.length === 0) return;
+            const binFiles = Array.from(rawFiles).filter(f => f.name.toLowerCase().endsWith('.bintop'));
+            if (binFiles.length === 0) { statusEl.textContent = 'No .bintop files found.'; return; }
+            switchToMode('simulation'); clearScene();
+            fileList = binFiles.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }));
+            currentFrameIndex = 0;
+            if (fileList.length > 1) { animControls.classList.remove('hidden'); animControls.classList.remove('opacity-50', 'pointer-events-none'); statusEl.textContent = `Found ${fileList.length} files. Sequence loaded.`; } 
+            else { animControls.classList.add('hidden'); statusEl.textContent = `Single file loaded: ${fileList[0].name}`; }
+            loadFrame(0, true);
+        }
+
+        fileInputFolder.addEventListener('change', (e) => handleSequenceFiles(e.target.files));
+        fileInputSequence.addEventListener('change', (e) => handleSequenceFiles(e.target.files));
+
+        function loadFrame(index, initScene = false) {
+            if (index < 0 || index >= fileList.length) { stopAnimation(); return; }
+            const file = fileList[index]; frameCounter.textContent = `${index + 1} / ${fileList.length}`;
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                processBinaryData(e.target.result, initScene, scene);
+                if (fileList.length > 1) statusEl.textContent = `Frame ${index+1}: ${file.name}`;
+                if(isPlaying) { const delay = parseInt(frameDelayInput.value) || 100; animationTimeout = setTimeout(() => nextFrame(), delay); }
+            };
+            reader.readAsArrayBuffer(file);
+        }
+
+        function processBinaryData(buffer, initScene, activeScene) {
+            const dataView = new DataView(buffer);
+            let offset = 0;
+            const magic = dataView.getUint32(offset, true); offset += 4;
+            let version = 1; if (magic === 0x48455841) { version = dataView.getUint32(offset, true); offset += 4; } else { offset = 0; }
+            let iter = 0; let radius = 0.0; let threshold = 0.0;
+            if (version >= 2) { iter = dataView.getInt32(offset, true); offset += 4; radius = dataView.getFloat32(offset, true); offset += 4; threshold = dataView.getFloat32(offset, true); offset += 4; }
+            const newCount = dataView.getUint32(offset, true); offset += 4;
+            const newDx = dataView.getFloat32(offset, true); offset += 4; const newDy = dataView.getFloat32(offset, true); offset += 4; const newDz = dataView.getFloat32(offset, true); offset += 4;
+            statTotal.textContent = newCount.toLocaleString(); statElemSize.textContent = `${newDx.toFixed(3)}, ${newDy.toFixed(3)}, ${newDz.toFixed(3)}`;
+            let geometryChanged = (Math.abs(newDx - elemDx) > 0.0001 || newCount !== elementCount);
+            elementCount = newCount; elemDx = newDx; elemDy = newDy; elemDz = newDz;
+            centroids = new Float32Array(buffer, offset, elementCount * 3); offset += elementCount * 3 * 4;
+            dataDensity = new Float32Array(buffer, offset, elementCount); offset += elementCount * 4;
+            dataL1 = new Float32Array(buffer, offset, elementCount); offset += elementCount * 4;
+
+            if (initScene || geometryChanged) {
+                ensureMeshExists(true, activeScene);
+                let minX=Infinity, maxX=-Infinity, minY=Infinity, maxY=-Infinity, minZ=Infinity, maxZ=-Infinity;
+                for(let i=0; i<elementCount; i+=100) { 
+                    const x=centroids[i*3], y=centroids[i*3+1], z=centroids[i*3+2];
+                    if(x<minX) minX=x; if(x>maxX) maxX=x; if(y<minY) minY=y; if(y>maxY) maxY=y; if(z<minZ) minZ=z; if(z>maxZ) maxZ=z;
+                }
+                globalMeshBounds = { minX, maxX, minY, maxY, minZ, maxZ }; currentBounds = globalMeshBounds;
+                const maxDim = Math.max((maxX-minX)||1, (maxY-minY)||1, (maxZ-minZ)||1); currentScaleFactor = maxDim * 0.15;
+                updateFog(maxDim); createBoundingBox(globalMeshBounds, activeScene);
+                const pad = 0.0; setupSlider(sliderX, valX, minX-pad, maxX+pad, 'x'); setupSlider(sliderY, valY, minY-pad, maxY+pad, 'y'); setupSlider(sliderZ, valZ, minZ-pad, maxZ+pad, 'z');
+                const cx = (minX+maxX)/2, cy = (minY+maxY)/2, cz = (minZ+maxZ)/2;
+                if(isFinite(cx) && activeScene && activeScene.activeCamera) { activeScene.activeCamera.setTarget(new BABYLON.Vector3(cx, cy, cz)); }
+                autoRange();
+
+                if (version >= 2 && offset < buffer.byteLength) {
+                    const jsonLen = dataView.getUint32(offset, true); offset += 4;
+                    if (jsonLen > 0) {
+                        const decoder = new TextDecoder(); const jsonBytes = new Uint8Array(buffer, offset, jsonLen);
+                        try {
+                            const meta = JSON.parse(decoder.decode(jsonBytes));
+                            currentMetadata = meta; configData = meta; 
+                            updateEditableTree(meta); renderContextMeshes(meta, activeScene, currentScaleFactor, globalMeshBounds);
+                        } catch(e) { console.error("JSON/Mesh Error", e); }
+                    }
+                }
+            } else { ensureMeshExists(false, activeScene); }
+            updateVisuals();
+        }
+
+        function createBoundingBox(bounds, activeScene) {
+            if (boundingBox) { boundingBox.dispose(); boundingBox = null; }
+            const { minX, maxX, minY, maxY, minZ, maxZ } = bounds;
+            boundingBox = BABYLON.MeshBuilder.CreateBox("boundingBox", { width: maxX - minX, height: maxY - minY, depth: maxZ - minZ }, activeScene);
+            boundingBox.position = new BABYLON.Vector3((minX + maxX) / 2, (minY + maxY) / 2, (minZ + maxZ) / 2);
+            const boxMat = new BABYLON.StandardMaterial("boundingBoxMat", activeScene);
+            boxMat.diffuseColor = new BABYLON.Color3(1, 1, 0); boxMat.alpha = 0.15; boxMat.wireframe = false; boxMat.backFaceCulling = false;
+            boundingBox.material = boxMat; boundingBox.isPickable = false; boundingBox.setEnabled(boxToggle.checked);
+        }
+
+        // === EDITABLE TREE IMPLEMENTATION ===
+        function updateEditableTree(data) { simMetaData.innerHTML = ''; simMetaData.appendChild(createEditableNode(data, [])); }
+
+        function createEditableNode(data, path) {
+            const container = document.createElement('div');
+            if (typeof data === 'object' && data !== null) {
+                if (Array.isArray(data)) {
+                    // Short arrays (vectors) on one line
+                    const isShortVector = data.length <= 4 && data.every(item => ['number','string'].includes(typeof item));
+                    if(isShortVector) {
+                        container.className = 'tree-array-row ml-2'; container.textContent = '[';
+                        data.forEach((val, idx) => {
+                           const input = document.createElement('input'); input.type = "text"; input.value = val;
+                           input.className = "tree-input w-16 text-xs p-0 border-0 border-b border-slate-300 focus:border-blue-500 bg-transparent text-center";
+                           
+                           // NEW: Add data-path for real-time updates
+                           input.dataset.path = [...path, idx].join('-');
+                           
+                           input.onchange = (e) => {
+                               let newVal = e.target.value;
+                               if(!isNaN(parseFloat(newVal)) && isFinite(newVal)) { newVal = parseFloat(newVal); }
+                               updateConfigValue([...path, idx], newVal);
+                           };
+                           container.appendChild(input); if(idx < data.length -1) container.appendChild(document.createTextNode(','));
+                        });
+                        container.appendChild(document.createTextNode(']'));
+                    } else {
+                        container.className = 'tree-block';
+                        data.forEach((item, index) => {
+                             const wrapper = document.createElement('div'); wrapper.className = 'mb-1';
+                             wrapper.appendChild(createEditableNode(item, [...path, index])); container.appendChild(wrapper);
+                        });
+                    }
+                } else {
+                    container.className = 'tree-block';
+                    Object.keys(data).forEach(key => {
+                        const row = document.createElement('div'); row.className = 'mb-1';
+                        const label = document.createElement('span'); label.className = 'tree-key'; label.textContent = key + ":"; row.appendChild(label);
+                        const child = createEditableNode(data[key], [...path, key]);
+                        if(child.classList.contains('tree-block')) { const blockWrapper = document.createElement('div'); blockWrapper.appendChild(child); row.appendChild(blockWrapper); } 
+                        else { row.appendChild(child); }
+                        container.appendChild(row);
+                    });
+                }
+            } else {
+                const input = document.createElement('input'); input.className = 'tree-input';
+                
+                // NEW: Add data-path for real-time updates (scalar inputs)
+                input.dataset.path = path.join('-');
+
+                if (typeof data === 'number') {
+                    input.type = 'number'; input.step = 'any'; input.value = data;
+                    input.onchange = (e) => updateConfigValue(path, parseFloat(e.target.value));
+                } else if (typeof data === 'boolean') {
+                    input.type = 'checkbox'; input.checked = data; input.className = 'ml-1 rounded text-blue-600 focus:ring-blue-500 h-3 w-3';
+                    input.onchange = (e) => updateConfigValue(path, e.target.checked);
+                } else {
+                    input.type = 'text'; input.value = data;
+                    input.onchange = (e) => updateConfigValue(path, e.target.value);
+                }
+                container.appendChild(input);
+            }
+            return container;
+        }
+
+        function updateConfigValue(path, value) {
+            if(!configData) return;
+            let current = configData;
+            for(let i=0; i<path.length-1; i++) { current = current[path[i]]; }
+            current[path[path.length-1]] = value;
+            if(path[0] === 'geometry' || path[0] === 'boundary_conditions' || path[0] === 'external_forces') { processConfigFile(configData); }
+        }
+
+        function interpretLocationComponent(spec, cmin, cmax) {
+            if (spec === ":") return null; if (typeof spec === "number") return spec;
+            if (typeof spec === "string" && spec.trim().endsWith("%")) {
+                var frac = parseFloat(spec.replace("%",""))/100; frac = Math.min(Math.max(frac,0),1);
+                return cmin + frac*(cmax - cmin);
+            }
+            return spec; 
+        }
+
+        function expandCoords(spec, min, max, step) {
+            if (spec === ":") { let res = []; for (let v = min; v <= max + 0.001; v += step) res.push(v); return res; }
+            return [interpretLocationComponent(spec, min, max)];
+        }
+
+        function renderContextMeshes(meta, activeScene, scaleFactor, bounds) {
+            if (!activeScene) return; contextMeshes.forEach(m => m.dispose()); contextMeshes = [];
+            const { minX, maxX, minY, maxY, minZ, maxZ } = bounds; const vizStep = Math.max(maxX-minX, maxY-minY, maxZ-minZ) / 25; 
+
+            if (meta.bcs && Array.isArray(meta.bcs)) {
+                meta.bcs.forEach((bc, idx) => {
+                    if (!bc.location || !Array.isArray(bc.location) || bc.location.length < 3) return;
+                    const xs = expandCoords(bc.location[0], minX, maxX, vizStep);
+                    const ys = expandCoords(bc.location[1], minY, maxY, vizStep);
+                    const zs = expandCoords(bc.location[2], minZ, maxZ, vizStep);
+                    xs.forEach((x, xi) => { ys.forEach((y, yi) => { zs.forEach((z, zi) => {
+                        const pos = new BABYLON.Vector3(x, y, z);
+                        const sphere = BABYLON.MeshBuilder.CreateSphere("bc_" + idx, { diameter: vizStep * 0.3 * bcSizeMultiplier }, activeScene);
+                        sphere.position = pos; const sphereMat = new BABYLON.StandardMaterial("bcMat", activeScene);
+                        sphereMat.diffuseColor = new BABYLON.Color3(1, 1, 0); sphereMat.emissiveColor = new BABYLON.Color3(0.5, 0.5, 0); 
+                        sphere.material = sphereMat; sphere.metadata = { type: "bc" }; contextMeshes.push(sphere);
+                        if (bc.DoFs) { bc.DoFs.forEach(dof => {
+                            let dir = BABYLON.Vector3.Zero(), col = new BABYLON.Color3(1,1,1);
+                            if(dof===1){ dir.x=1; col.r=1; col.g=0; col.b=0; } else if(dof===2){ dir.y=1; col.r=0; col.g=1; col.b=0; } else if(dof===3){ dir.z=1; col.r=0; col.g=0; col.b=1; }
+                            const arrow = createArrow("bcA", pos, dir, vizStep*0.8*bcSizeMultiplier, col, vizStep*0.08*bcSizeMultiplier);
+                            if(arrow) { arrow.metadata = {type:"bc"}; contextMeshes.push(arrow); }
+                        });}
+                    });});});
+                });
+            }
+
+            if (meta.loads && Array.isArray(meta.loads)) {
+                meta.loads.forEach((load, idx) => {
+                    if (!load.location || !Array.isArray(load.location) || load.location.length < 3) return;
+                    if (!load.F || !Array.isArray(load.F) || load.F.length < 3) return;
+                    let fx = interpretLocationComponent(load.location[0], minX, maxX);
+                    let fy = interpretLocationComponent(load.location[1], minY, maxY);
+                    let fz = interpretLocationComponent(load.location[2], minZ, maxZ);
+                    if (fx === null || fy === null || fz === null) return;
+                    const pos = new BABYLON.Vector3(fx, fy, fz);
+                    const vec = new BABYLON.Vector3(load.F[0], load.F[1], load.F[2]);
+                    const mag = vec.length();
+                    if (mag > 1e-5) {
+                        const dir = vec.normalize(); const len = scaleFactor * 1.2 * loadSizeMultiplier;
+                        const start = pos.subtract(dir.scale(len));
+                        // Changed to Purple as requested
+                        const arrow = createArrow("Ld"+idx, start, dir, len, new BABYLON.Color3(0.6, 0.2, 1.0), len * 0.08);
+                        if (arrow) { arrow.metadata = { type: "load" }; contextMeshes.push(arrow); }
+                        const labelPlane = BABYLON.MeshBuilder.CreatePlane("lbl"+idx, {size: scaleFactor * 0.5 * textSizeMultiplier}, activeScene);
+                        labelPlane.position = pos; 
+                        labelPlane.billboardMode = BABYLON.Mesh.BILLBOARDMODE_ALL;
+                        labelPlane.renderingGroupId = 2; // Render on top
+                        const adt = BABYLON.GUI.AdvancedDynamicTexture.CreateForMesh(labelPlane);
+                        const lbl = new BABYLON.GUI.TextBlock(); lbl.text = load.name || `Load ${idx+1}`; lbl.color = "white"; lbl.fontSize = 48; lbl.fontWeight = "bold";
+                        adt.addControl(lbl); labelPlane.metadata = { type: "load" }; contextMeshes.push(labelPlane);
+                    }
+                });
+            }
+
+            if (meta.geometry) {
+                Object.keys(meta.geometry).forEach(key => {
+                    const g = meta.geometry[key];
+                    if (!g || !g.type || !g.action) return;
+                    if (['length_x','length_y','length_z','target_elem_count'].includes(key)) return;
+                    let mesh = null;
+                    if (!g.center || !Array.isArray(g.center) || g.center.length < 3) return;
+                    const pos = new BABYLON.Vector3(g.center[0], g.center[1], g.center[2]);
+                    if (g.type === 'sphere') mesh = BABYLON.MeshBuilder.CreateSphere(key, {diameter: g.diameter}, activeScene);
+                    else if (g.type === 'box') {
+                        let sx = g.side || 1, sy = g.side || 1, sz = g.side || 1;
+                        if (g.size && Array.isArray(g.size) && g.size.length >= 3) { sx = g.size[0]; sy = g.size[1]; sz = g.size[2]; }
+                        mesh = BABYLON.MeshBuilder.CreateBox(key, {width: sx, height: sy, depth: sz}, activeScene);
+                    }
+                    if (mesh) {
+                        mesh.position = pos; const mat = new BABYLON.StandardMaterial(key+"M", activeScene); mat.alpha = 0.4;
+                        if (g.action === 'add') { mat.diffuseColor = new BABYLON.Color3(0,0,1); mat.emissiveColor = new BABYLON.Color3(0,0,0.5); } 
+                        else { mat.diffuseColor = new BABYLON.Color3(1,0,0); mat.emissiveColor = new BABYLON.Color3(0.5,0,0); }
+                        mesh.material = mat; 
+                        mesh.metadata = { type: "shape" }; 
+                        mesh.isPickable = true; // Crucial for picking
+                        
+                        // NEW GIZMO LOGIC: Register Mesh in Map
+                        meshToConfigMap.set(mesh.name, key);
+                        
+                        contextMeshes.push(mesh);
+                    }
+                });
+            }
+            updateContextVisibility();
+        }
+
+        // ... (Remaining helpers ensureMeshExists, resizeBuffers, createArrow, slider handlers same as previous) ...
+        function redrawContextMeshes() { if (currentMetadata && currentBounds) { renderContextMeshes(currentMetadata, scene, currentScaleFactor, currentBounds); } }
+        function updateContextVisibility() { contextMeshes.forEach(m => { 
+            if(m.metadata.type === 'bc') m.setEnabled(bcToggle.checked); 
+            if(m.metadata.type === 'load') m.setEnabled(loadToggle.checked); 
+            if(m.metadata.type === 'shape') m.setEnabled(shapesToggle.checked); 
+        }); }
+        function createArrow(name, start, dir, length, color, thickness=0.3) {
+            var shaftLen = length * 0.8; var tipLen = length * 0.2;
+            var shaft = BABYLON.MeshBuilder.CreateCylinder(name + "_s", {height: shaftLen, diameter: thickness}, scene);
+            shaft.position = start.add(dir.scale(shaftLen / 2));
+            var tip = BABYLON.MeshBuilder.CreateCylinder(name + "_t", {height: tipLen, diameterTop: 0, diameterBottom: thickness * 2.5}, scene);
+            tip.position = start.add(dir.scale(shaftLen + tipLen / 2));
+            var up = new BABYLON.Vector3(0, 1, 0); var axis = BABYLON.Vector3.Cross(up, dir); var angle = Math.acos(BABYLON.Vector3.Dot(up, dir));
+            if (axis.length() < 1e-5) { if (dir.y < 0) angle = Math.PI; else angle = 0; axis = new BABYLON.Vector3(1,0,0); }
+            var quat = BABYLON.Quaternion.RotationAxis(axis, angle); shaft.rotationQuaternion = quat; tip.rotationQuaternion = quat;
+            var mat = new BABYLON.StandardMaterial(name + "_m", scene); mat.diffuseColor = color; mat.emissiveColor = color;
+            shaft.material = mat; tip.material = mat; return BABYLON.Mesh.MergeMeshes([shaft, tip], true, true, undefined, false, true);
+        }
+        function ensureMeshExists(forceRebuild, activeScene) {
+            if (masterMesh && !forceRebuild) return;
+            if (masterMesh) { if(shadowGenerator) shadowGenerator.removeShadowCaster(masterMesh); masterMesh.dispose(); masterMesh = null; }
+            if (!activeScene) return;
+            const mat = new BABYLON.PBRMaterial("mat", activeScene); mat.roughness = 0.5; mat.metallic = 0.1;
+            masterMesh = BABYLON.MeshBuilder.CreateBox("box", { width: elemDx, height: elemDy, depth: elemDz }, activeScene); masterMesh.material = mat;
+            if(shadowGenerator) { shadowGenerator.addShadowCaster(masterMesh, true); masterMesh.receiveShadows = true; }
+            if (mirrorTexture) { if(!mirrorTexture.renderList) mirrorTexture.renderList = []; if(mirrorTexture.renderList.indexOf(masterMesh) === -1) mirrorTexture.renderList.push(masterMesh); }
+            masterMesh.thinInstanceRegisterAttribute("color", 4); resizeBuffers();
+        }
+        function resizeBuffers() { matrixBuffer = new Float32Array(elementCount * 16); colorBuffer = new Float32Array(elementCount * 4); }
+        bcToggle.addEventListener('change', (e) => { updateContextVisibility(); });
+        loadToggle.addEventListener('change', (e) => { updateContextVisibility(); });
+        shapesToggle.addEventListener('change', (e) => { updateContextVisibility(); });
+        groundTranslucencyToggle.addEventListener('change', (e) => { if(ground && ground.material) ground.material.alpha = e.target.checked ? 0.3 : 1.0; });
+        mirrorToggle.addEventListener('change', (e) => { if(ground && ground.material) ground.material.reflectionTexture = e.target.checked ? mirrorTexture : null; });
+        fogToggle.addEventListener('change', (e) => { if(scene) scene.fogEnabled = e.target.checked; });
+        bcSizeSlider.addEventListener('input', (e) => { bcSizeMultiplier = parseFloat(e.target.value); bcSizeValue.textContent = bcSizeMultiplier.toFixed(1) + 'x'; redrawContextMeshes(); });
+        loadSizeSlider.addEventListener('input', (e) => { loadSizeMultiplier = parseFloat(e.target.value); loadSizeValue.textContent = loadSizeMultiplier.toFixed(1) + 'x'; redrawContextMeshes(); });
+        textSizeSlider.addEventListener('input', (e) => { textSizeMultiplier = parseFloat(e.target.value); textSizeValue.textContent = textSizeMultiplier.toFixed(1) + 'x'; redrawContextMeshes(); });
+        function getCurrentDataArray() { if (currentField === 'l1_stress' || currentField === 'ten_comp') return dataL1; return dataDensity; }
+        function autoRange() {
+            const data = getCurrentDataArray(); if (!data) return;
+            let min = Infinity, max = -Infinity; const step = Math.max(1, Math.floor(elementCount / 5000));
+            for(let i=0; i<elementCount; i+=step) { const v = Math.abs(data[i]); if(v < min) min = v; if(v > max) max = v; }
+            if (min === Infinity) { min=0; max=1; } currentMin = min; currentMax = max; minInput.value = min.toFixed(4); maxInput.value = max.toFixed(4);
+        }
+        function updateVisuals() {
+            if (!masterMesh || !dataDensity) return; if (matrixBuffer.length !== elementCount * 16) resizeBuffers();
+            const data = getCurrentDataArray(); const range = (currentMax - currentMin) || 1.0; let visibleCount = 0;
+            for (let i = 0; i < elementCount; i++) {
+                const rho = dataDensity[i]; let visible = (rho >= densityCutoff);
+                if (visible) {
+                    const cx = centroids[i*3], cy = centroids[i*3+1], cz = centroids[i*3+2];
+                    if (sliceMode.x === 'below' && cx > slice.x) visible = false; else if (sliceMode.x === 'above' && cx < slice.x) visible = false;
+                    if (visible) { if (sliceMode.y === 'below' && cy > slice.y) visible = false; else if (sliceMode.y === 'above' && cy < slice.y) visible = false; }
+                    if (visible) { if (sliceMode.z === 'below' && cz > slice.z) visible = false; else if (sliceMode.z === 'above' && cz < slice.z) visible = false; }
+                }
+                let scale = 0.0; const mOffset = i * 16, cOffset = i * 4;
+                if (visible) {
+                    scale = 1.0; visibleCount++; const absVal = Math.abs(data[i]); let norm = (absVal - currentMin) / range; if(norm < 0) norm = 0; if(norm > 1) norm = 1;
+                    if (currentField === 'ten_comp') {
+                        if (data[i] >= 0) { colorBuffer[cOffset] = norm; colorBuffer[cOffset + 1] = 0; colorBuffer[cOffset + 2] = 0; } else { colorBuffer[cOffset] = 0; colorBuffer[cOffset + 1] = 0; colorBuffer[cOffset + 2] = norm; }
+                    } else { const h = (1.0 - norm) * 240; const c = BABYLON.Color3.FromHSV(h, 0.9, 1.0); colorBuffer[cOffset] = c.r; colorBuffer[cOffset + 1] = c.g; colorBuffer[cOffset + 2] = c.b; }
+                    colorBuffer[cOffset + 3] = 1.0;
+                }
+                matrixBuffer[mOffset] = scale; matrixBuffer[mOffset+5] = scale; matrixBuffer[mOffset+10] = scale; matrixBuffer[mOffset+15] = 1;
+                matrixBuffer[mOffset+12] = centroids[i*3]; matrixBuffer[mOffset+13] = centroids[i*3+1]; matrixBuffer[mOffset+14] = centroids[i*3+2];
+            }
+            masterMesh.thinInstanceSetBuffer("matrix", matrixBuffer, 16, true); masterMesh.thinInstanceSetBuffer("color", colorBuffer, 4, true); statVisible.textContent = visibleCount.toLocaleString();
+        }
+        applyButton.addEventListener('click', () => { currentMin = parseFloat(minInput.value); currentMax = parseFloat(maxInput.value); updateVisuals(); });
+        autoRangeBtn.addEventListener('click', () => { autoRange(); updateVisuals(); });
+        dataFieldSelect.addEventListener('change', (e) => { currentField = e.target.value; autoRange(); updateVisuals(); });
+        densitySlider.addEventListener('input', (e) => { densityCutoff = parseFloat(e.target.value); densityValue.textContent = densityCutoff.toFixed(2); updateVisuals(); });
+        shadowToggle.addEventListener('change', (e) => { if(e.target.checked) { if(!shadowGenerator && directionLight) { shadowGenerator = new BABYLON.CascadedShadowGenerator(2048, directionLight); shadowGenerator.usePercentageCloserFiltering = true; shadowGenerator.filteringQuality = BABYLON.ShadowGenerator.QUALITY_HIGH; shadowGenerator.blurKernel = 32; shadowGenerator.blurScale = 2; shadowGenerator.lambda = 0.95; shadowGenerator.stabilizeCascades = true; shadowGenerator.numCascades = 4; shadowGenerator.autoCalcDepthBounds = true; shadowGenerator.bias = 0.00005; shadowGenerator.normalBias = 0.0; shadowGenerator.forceBackFacesOnly = false; if(masterMesh) { shadowGenerator.addShadowCaster(masterMesh, true); masterMesh.receiveShadows = true; } if(ground) ground.receiveShadows = true; } } else { if(shadowGenerator) { if(masterMesh) masterMesh.receiveShadows = false; if(ground) ground.receiveShadows = false; shadowGenerator.dispose(); shadowGenerator = null; } } });
+        backgroundToggle.addEventListener('change', (e) => { if(e.target.checked) { scene.clearColor = new BABYLON.Color4(1,1,1,1); scene.fogColor = new BABYLON.Color3(1, 1, 1); } else { scene.clearColor = new BABYLON.Color4(0,0,0,1); scene.fogColor = new BABYLON.Color3(0, 0, 0); } });
+        groundToggle.addEventListener('change', (e) => { if(ground) ground.isVisible = e.target.checked; });
+        btnPlay.addEventListener('click', () => { if (isPlaying) { isPlaying = false; if(animationTimeout) clearTimeout(animationTimeout); iconPlay.classList.remove('hidden'); iconPause.classList.add('hidden'); } else { isPlaying = true; iconPlay.classList.add('hidden'); iconPause.classList.remove('hidden'); if (currentFrameIndex >= fileList.length - 1) { currentFrameIndex = -1; nextFrame(); } else { loadFrame(currentFrameIndex); } } });
+        function nextFrame() { if (currentFrameIndex < fileList.length - 1) { currentFrameIndex++; loadFrame(currentFrameIndex); } else { if(isPlaying) btnPlay.click(); } }
+        btnNext.addEventListener('click', () => { stopAnimation(); nextFrame(); }); btnPrev.addEventListener('click', () => { stopAnimation(); if(currentFrameIndex>0) { currentFrameIndex--; loadFrame(currentFrameIndex); } });
+        btnFirst.addEventListener('click', () => { stopAnimation(); currentFrameIndex=0; loadFrame(0); }); btnLast.addEventListener('click', () => { stopAnimation(); currentFrameIndex=fileList.length-1; loadFrame(currentFrameIndex); });
+        function stopAnimation() { if(isPlaying) btnPlay.click(); }
+        btnTurntable.addEventListener('click', () => { isTurntableActive = !isTurntableActive; btnTurntable.classList.toggle('bg-blue-200'); });
+        const sliderX = document.getElementById('sliderX'), sliderY = document.getElementById('sliderY'), sliderZ = document.getElementById('sliderZ');
+        const valX = document.getElementById('valX'), valY = document.getElementById('valY'), valZ = document.getElementById('valZ');
+        const radiosX = document.getElementsByName('modeX'), radiosY = document.getElementsByName('modeY'), radiosZ = document.getElementsByName('modeZ');
+        let slice = { x: null, y: null, z: null }; let sliceMode = { x: 'below', y: 'below', z: 'below' };
+        function setupSlider(el, labelEl, min, max, axis) { el.min = min; el.max = max; el.step = (max - min) / 100; if(slice[axis] === null || slice[axis] < min || slice[axis] > max) { el.value = (sliceMode[axis] === 'below') ? max : min; slice[axis] = parseFloat(el.value); } labelEl.textContent = slice[axis].toFixed(2); }
+        function attachSpatialListeners(slider, valEl, radios, axis) { slider.addEventListener('input', (e) => { slice[axis] = parseFloat(e.target.value); valEl.textContent = slice[axis].toFixed(2); if (currentMode === 'simulation') updateVisuals(); }); radios.forEach(radio => { radio.addEventListener('change', (e) => { sliceMode[axis] = e.target.value; if (sliceMode[axis] === 'below') { slider.value = slider.max; slice[axis] = parseFloat(slider.max); } else { slider.value = slider.min; slice[axis] = parseFloat(slider.min); } valEl.textContent = slice[axis].toFixed(2); if (currentMode === 'simulation') updateVisuals(); }); }); }
+        attachSpatialListeners(sliderX, valX, radiosX, 'x'); attachSpatialListeners(sliderY, valY, radiosY, 'y'); attachSpatialListeners(sliderZ, valZ, radiosZ, 'z');
+        window.addEventListener('DOMContentLoaded', initBabylon);
+    </script>
+</body>
+</html>

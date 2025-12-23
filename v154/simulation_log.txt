@@ -1,0 +1,121 @@
+================================================================================
+HEXA FEM TOPOLOGY OPTIMIZATION LOG
+Start Date: 2025-12-23T20:30:47.493
+================================================================================
+
+--- HARDWARE INFO ---
+Hardware Profile:
+  CPU Threads: 32
+  System RAM:  115.56 GB Free / 127.95 GB Total
+  GPU Device:  NVIDIA GeForce RTX 3080 | VRAM: 8.85 GB Free / 10.0 GB Total
+  Julia Ver:   1.12.3
+
+--- CONFIGURATION ECHO ---
+optimization_parameters:
+  radius_max_multiplier: 1.0
+  minimum_feature_size_physical: 0.1
+  constraint_constant: 0.25
+  density_update_method: hard
+  exponent_for_cutoff_schedule: 1.5
+  minimum_feature_size_elements: 1.0
+  final_density_threshold: 0.9
+  radius_min_multiplier: 1
+  radius_decay_exponent: 1.8
+  max_culling_ratio: 0.2
+  density_clamp_max: 1
+  min_density: 0.0001
+boundary_conditions: [Dict{Any, Any}("location" => Any[0, ":", ":"], "DoFs" => [1, 2, 3])]
+output_settings:
+  stl_mesh_smoothing_iters: 6
+  iso_surface_threshold: 0.01
+  stl_target_triangle_count: 95000
+  maximum_cells_in_binary_output: 25_000_000
+  save_VTK_frequency: 1
+  smoothing_settings:
+    iterations: 10
+    lambda: 0.5
+    type: taubin
+    mu: -0.53
+  save_bin_frequency: 1
+  save_STL_frequency: 10
+  stl_smoothing_passes: 2
+  stl_subdivision_level: 2
+  export_frequency: 1
+  save_principal_stress_vectors: no
+  log_filename: simulation_log.txt
+hardware_profile_applied: RTX
+l1_stress_allowable: 1.5
+solver_parameters:
+  max_iterations: 30000
+  preconditioner: multigrid
+  max_shift_attempts: 7
+  diagonal_shift_factor: 1.0e-7
+  gpu_method: krylov
+  krylov_solver: cg
+  shift_multiplier: 10.0
+  stagnation_tolerance: 0.001
+  solver_type: gpu
+  tolerance: 1.0e-6
+material:
+  nu: 0.3
+  gravity_acceleration: 0.0
+  E: 1
+  material_density: 0.001
+  delta_temperature: 0.0
+geometry:
+  length_z: 20
+  target_elem_count: 1_500_000
+  sphere3:
+    stiffness_ratio: -10
+    center: [34.29, 5, 50]
+    diameter: 4
+    type: sphere
+  box1:
+    stiffness_ratio: 5
+    center: [28, 15, 50]
+    size: [1, 2, 3]
+    type: box
+  length_y: 20
+  box2:
+    stiffness_ratio: 0
+    center: [45.06, 8.95, 50]
+    size: [1, 4, 2]
+    type: box
+  length_x: 60
+  sphere2:
+    stiffness_ratio: 10
+    center: [60.38, -0.07, 50]
+    diameter: 4
+    type: sphere
+  sphere1:
+    stiffness_ratio: 0
+    center: [12.51, 28.49, 50]
+    diameter: 8
+    type: sphere
+external_forces: [Dict{Any, Any}("name" => "Y10", "location" => Any["100%", 0, 0], "F" => [0, 10, 0]), Dict{Any, Any}("name" => "Z-10", "location" => Any["100%", 0, "50%"], "F" => [0, 0, -10]), Dict{Any, Any}("name" => "Y20", "location" => Any["100%", 0, "100%"], "F" => [0, 20, 0]), Dict{Any, Any}("name" => "Mid_Y20", "location" => Any["50%", 0, "50%"], "F" => [0, 15, 0])]
+number_of_iterations: 100
+hard_stop_after_iteration: 250
+force_float64: false
+growth_settings:
+  max_growth_rate: 1.1
+  target_active_elements: 50_000_000
+  exponent_for_refinement_schedule: 2.0
+  max_background_elements: 500_000_000
+  gpu_solver_safety_factor: 0.95
+  nominal_refinement_threshold: 0.9
+gpu_profile: RTX
+restart_configuration:
+  file_path: 
+  enable_restart: false
+
+============================================================================================================================================================================================================================
+| Iter |  Mesh Size  | Total El | Active El |  Radius  |  Cutoff  | Compliance | Strain Energy | Avg L1 Stress | Vol Frac | Delta Rho | Refine? | Residual | Preconditioner | Iter Time | Wall Time | VRAM |
+|    1 |   238x79x79 | 1.49e+06 |  1.49e+06 |   0.5056 |    0.001 |   2.63e+04 |      1.31e+04 |      5.07e-01 |    1.000 |   67.16% | Nominal | 5.22e-07 | GMG_GPU        |  00:00:30 |  20:31:19 |  1.5G |
+|    2 |   238x79x79 | 1.49e+06 |  1.49e+06 |   0.5054 |    0.003 |   2.63e+04 |      1.31e+04 |      5.07e-01 |    1.000 |   67.16% | Nominal | 2.02e-07 | GMG_GPU        |  00:00:03 |  20:31:22 |  1.5G |
+|    3 |   238x79x79 | 1.49e+06 |  1.49e+06 |   0.5052 |    0.005 |   2.63e+04 |      1.31e+04 |      5.07e-01 |    1.000 |   67.15% | Nominal | 9.25e-08 | GMG_GPU        |  00:00:03 |  20:31:25 |  1.5G |
+|    4 |   238x79x79 | 1.49e+06 |  1.48e+06 |   0.5048 |    0.007 |   2.63e+04 |      1.31e+04 |      5.08e-01 |    0.999 |   67.11% | Nominal | 9.18e-08 | GMG_GPU        |  00:00:03 |  20:31:28 |  1.5G |
+|    5 |   238x79x79 | 1.49e+06 |  1.48e+06 |   0.5045 |    0.010 |   2.63e+04 |      1.31e+04 |      5.08e-01 |    0.999 |   67.06% | Nominal | 2.74e-10 | GMG_GPU        |  00:00:04 |  20:31:33 |  1.5G |
+|    6 |   238x79x79 | 1.49e+06 |  1.48e+06 |   0.5040 |    0.013 |   2.63e+04 |      1.31e+04 |      5.08e-01 |    0.998 |   67.00% | Nominal | 1.99e-07 | GMG_GPU        |  00:00:03 |  20:31:35 |  1.5G |
+|    7 |   238x79x79 | 1.49e+06 |  1.48e+06 |   0.5035 |    0.017 |   2.63e+04 |      1.31e+04 |      5.08e-01 |    0.998 |   66.93% |    Skip | 4.82e-10 | GMG_GPU        |  00:00:04 |  20:31:40 |  1.5G |
+|    8 |   238x79x79 | 1.49e+06 |  1.48e+06 |   0.5029 |    0.020 |   2.63e+04 |      1.31e+04 |      5.09e-01 |    0.997 |   66.85% |    Skip | 5.33e-07 | GMG_GPU        |  00:00:03 |  20:31:43 |  1.5G |
+|    9 |   244x81x81 | 1.60e+06 |  1.59e+06 |   0.4899 |    0.024 |   2.65e+04 |      1.32e+04 |      4.89e-01 |    0.996 |   67.98% | Refined | 4.66e-08 | GMG_GPU        |  00:00:05 |  20:31:48 |  1.5G |

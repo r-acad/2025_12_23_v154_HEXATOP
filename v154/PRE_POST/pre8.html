@@ -1,0 +1,1079 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8" />
+    <title>FEM Visualization & Configurator</title>
+    <style>
+        /* Tailwind-inspired aesthetics */
+        html, body {
+            width: 100%; height: 100%;
+            margin: 0; overflow: hidden;
+            font-family: 'Inter', sans-serif;
+            background-color: #f7f7f7;
+        }
+        #renderCanvas {
+            width: 100%; height: 100%;
+            touch-action: none;
+        }
+        #controls {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            z-index: 10;
+            background: rgba(255,255,255,0.95);
+            padding: 15px;
+            border-radius: 8px;
+            max-width: 320px;
+            max-height: 95vh;
+            overflow-y: auto;
+            box-shadow: 0 8px 16px rgba(0,0,0,0.2);
+            border: 1px solid #e0e0e0;
+        }
+        .legend {
+            display: flex;
+            align-items: center;
+            margin-bottom: 5px;
+            font-size: 14px;
+            color: #4b5563;
+        }
+        .color-box {
+            width: 15px;
+            height: 15px;
+            margin-right: 8px;
+            display: inline-block;
+            border-radius: 3px;
+            border: 1px solid rgba(0,0,0,0.1);
+        }
+        
+        #controls label {
+            display: block;
+            margin-top: 10px;
+            font-size: 14px;
+            font-weight: 600;
+            color: #1f2937;
+        }
+        .config-input {
+            width: 100%;
+            padding: 8px;
+            box-sizing: border-box;
+            border: 1px solid #d1d5db;
+            border-radius: 4px;
+            margin-top: 4px;
+            font-size: 14px;
+            transition: border-color 0.15s;
+        }
+        .config-input:focus {
+            border-color: #3b82f6;
+            outline: none;
+            box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
+        }
+
+        #fileInput {
+            margin-top: 15px;
+            width: 100%;
+        }
+        .btn {
+            display: block;
+            width: 100%;
+            padding: 10px;
+            margin-top: 10px;
+            background-color: #3b82f6;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 15px;
+            font-weight: 700;
+            transition: background-color 0.2s;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+        .btn:hover:not(:disabled) {
+            background-color: #2563eb;
+        }
+        .btn:disabled {
+            background-color: #9ca3af;
+            cursor: not-allowed;
+            box-shadow: none;
+        }
+        .btn-secondary {
+            background-color: #6b7280;
+        }
+        .btn-secondary:hover {
+            background-color: #4b5563;
+        }
+        .btn-danger {
+            background-color: #ef4444;
+        }
+        .btn-danger:hover {
+            background-color: #dc2626;
+        }
+        .btn-row {
+            display: flex;
+            gap: 5px;
+            margin-top: 10px;
+        }
+        .btn-row .btn {
+            margin-top: 0;
+            flex: 1;
+            padding: 8px 5px;
+            font-size: 13px;
+        }
+        .input-row {
+            display: flex;
+            gap: 5px;
+        }
+
+        /* List styling for BCs */
+        #bcListContainer {
+            margin-top: 10px;
+            background: #f9fafb;
+            border: 1px solid #e5e7eb;
+            border-radius: 4px;
+            padding: 5px;
+            max-height: 150px;
+            overflow-y: auto;
+        }
+        .bc-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: white;
+            padding: 6px;
+            margin-bottom: 4px;
+            border: 1px solid #eee;
+            border-radius: 4px;
+            font-size: 12px;
+            cursor: pointer;
+        }
+        .bc-item:hover { background: #f3f4f6; }
+        .bc-item span { font-weight: bold; }
+
+        #instructions {
+            margin-top: 10px;
+            font-size: 14px;
+            color: #6b7280;
+            padding: 8px;
+            border-left: 4px solid #3b82f6;
+            background-color: #eff6ff;
+            border-radius: 4px;
+        }
+        #objectInfo {
+            margin-top: 10px;
+            padding: 10px;
+            background-color: #f3f4f6;
+            border-radius: 4px;
+            font-size: 12px;
+            white-space: pre-line;
+            border: 1px solid #e5e7eb;
+        }
+        hr {
+            margin: 15px 0;
+            border: 0;
+            border-top: 1px solid #e5e7eb;
+        }
+
+        /* MODAL STYLES */
+        .modal {
+            display: none;
+            position: absolute;
+            top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            z-index: 100;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.3);
+            width: 300px;
+            border: 1px solid #ccc;
+            overflow: hidden;
+        }
+        .modal-header {
+            padding: 10px 15px;
+            background: #f3f4f6;
+            cursor: move;
+            border-bottom: 1px solid #e5e7eb;
+            display: flex;
+            align-items: center;
+        }
+        .modal-header h4 {
+            margin: 0;
+            font-size: 16px;
+            color: #1f2937;
+            pointer-events: none;
+        }
+        .modal-body {
+            padding: 20px;
+        }
+        .modal-row { display: flex; gap: 10px; margin-bottom: 10px; }
+        .modal-col { flex: 1; }
+        .modal-backdrop {
+            display: none;
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.4);
+            z-index: 99;
+        }
+        .checkbox-group {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 10px;
+        }
+        .checkbox-group label {
+            font-weight: normal;
+            font-size: 13px;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            margin-top: 0;
+        }
+    </style>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+
+<div id="modalBackdrop" class="modal-backdrop"></div>
+
+<div id="shapeModal" class="modal">
+    <div class="modal-header"><h4>Edit Shape</h4></div>
+    <div class="modal-body">
+        <input type="hidden" id="editMeshName">
+        <label>Center Position (X, Y, Z)</label>
+        <div class="modal-row">
+            <input type="number" id="editX" class="config-input" placeholder="X" step="0.1">
+            <input type="number" id="editY" class="config-input" placeholder="Y" step="0.1">
+            <input type="number" id="editZ" class="config-input" placeholder="Z" step="0.1">
+        </div>
+        <div id="sphereInputs">
+            <label>Diameter</label>
+            <input type="number" id="editDiameter" class="config-input" step="0.1">
+        </div>
+        <div id="boxInputs" style="display:none;">
+            <label>Size (X, Y, Z)</label>
+            <div class="modal-row">
+                <input type="number" id="editSizeX" class="config-input" placeholder="Sx" step="0.1">
+                <input type="number" id="editSizeY" class="config-input" placeholder="Sy" step="0.1">
+                <input type="number" id="editSizeZ" class="config-input" placeholder="Sz" step="0.1">
+            </div>
+        </div>
+        <label>Stiffness Ratio</label>
+        <input type="number" id="editStiffness" class="config-input" step="0.1">
+        <div class="modal-row">
+            <button id="saveShapeBtn" class="btn">Save</button>
+            <button id="cancelShapeBtn" class="btn btn-secondary">Cancel</button>
+        </div>
+    </div>
+</div>
+
+<div id="forceModal" class="modal">
+    <div class="modal-header"><h4>Edit Force</h4></div>
+    <div class="modal-body">
+        <input type="hidden" id="editForceIndex">
+        <input type="hidden" id="editForceMeshName">
+        <label>Location (Num or %)</label>
+        <div class="modal-row">
+            <input type="text" id="forceX" class="config-input" placeholder="X">
+            <input type="text" id="forceY" class="config-input" placeholder="Y">
+            <input type="text" id="forceZ" class="config-input" placeholder="Z">
+        </div>
+        <label>Force Vector (Fx, Fy, Fz)</label>
+        <div class="modal-row">
+            <input type="number" id="forceFx" class="config-input" placeholder="Fx" step="1">
+            <input type="number" id="forceFy" class="config-input" placeholder="Fy" step="1">
+            <input type="number" id="forceFz" class="config-input" placeholder="Fz" step="1">
+        </div>
+        <div class="modal-row" style="margin-top:15px;">
+            <button id="saveForceBtn" class="btn">Save Force</button>
+            <button id="cancelForceBtn" class="btn btn-secondary">Cancel</button>
+        </div>
+    </div>
+</div>
+
+<div id="bcModal" class="modal">
+    <div class="modal-header"><h4>Edit Constraint</h4></div>
+    <div class="modal-body">
+        <input type="hidden" id="editBCIndex">
+        
+        <label>Location (Num, %, or ':')</label>
+        <div class="modal-row">
+            <input type="text" id="bcX" class="config-input" placeholder="X (e.g. 0, :, 100%)">
+            <input type="text" id="bcY" class="config-input" placeholder="Y (e.g. :, 50%)">
+            <input type="text" id="bcZ" class="config-input" placeholder="Z (e.g. 0)">
+        </div>
+
+        <label>DoFs (Constraints)</label>
+        <div class="checkbox-group">
+            <label><input type="checkbox" id="bcDof1" value="1"> 1 (Fix X)</label>
+            <label><input type="checkbox" id="bcDof2" value="2"> 2 (Fix Y)</label>
+            <label><input type="checkbox" id="bcDof3" value="3"> 3 (Fix Z)</label>
+        </div>
+
+        <div class="modal-row" style="margin-top:15px;">
+            <button id="saveBCBtn" class="btn">Save Constraint</button>
+            <button id="cancelBCBtn" class="btn btn-secondary">Cancel</button>
+        </div>
+    </div>
+</div>
+
+<div id="arrayModal" class="modal">
+    <div class="modal-header"><h4>Create Array</h4></div>
+    <div class="modal-body">
+        <input type="hidden" id="arraySourceMeshName">
+        <label>Direction Vector (dX, dY, dZ)</label>
+        <div class="modal-row">
+            <input type="number" id="arrayDx" class="config-input" placeholder="dX" value="10">
+            <input type="number" id="arrayDy" class="config-input" placeholder="dY" value="0">
+            <input type="number" id="arrayDz" class="config-input" placeholder="dZ" value="0">
+        </div>
+        <label>Number of Copies</label>
+        <input type="number" id="arrayCount" class="config-input" value="3" min="1" step="1">
+        <div class="modal-row" style="margin-top:15px;">
+            <button id="createArrayBtn" class="btn">Create Copies</button>
+            <button id="cancelArrayBtn" class="btn btn-secondary">Cancel</button>
+        </div>
+    </div>
+</div>
+
+<div id="controls">
+    <h3>⚙ FEM Opt Configurator</h3>
+    <h4>Legend</h4>
+    <div class="legend">
+        <div class="color-box" style="background-color: blue; opacity: 0.5;"></div>
+        <span>Stiffness > 0 (Add)</span>
+    </div>
+    <div class="legend">
+        <div class="color-box" style="background-color: red; opacity: 0.5;"></div>
+        <span>Stiffness < 0 (Remove)</span>
+    </div>
+    <div class="legend">
+        <div class="color-box" style="background-color: #800080; border: 1px solid #999;"></div>
+        <span>Forces (Purple)</span>
+    </div>
+    <div class="legend">
+        <div class="color-box" style="background-color: #FFFF00; border: 1px solid #999;"></div>
+        <span>Constraint (Yellow)</span>
+    </div>
+
+    <hr/>
+    <label>Domain Size (X, Y, Z):</label>
+    <div class="input-row">
+        <input type="number" id="domainX" class="config-input" placeholder="L_x" step="1">
+        <input type="number" id="domainY" class="config-input" placeholder="L_y" step="1">
+        <input type="number" id="domainZ" class="config-input" placeholder="L_z" step="1">
+    </div>
+
+    <hr/>
+    <label>Create Object:</label>
+    <div class="btn-row">
+        <button id="addSphereBtn" class="btn" style="margin-top:0;">+ Sphere</button>
+        <button id="addBoxBtn" class="btn" style="margin-top:0;">+ Box</button>
+    </div>
+    <div class="btn-row">
+        <button id="addBCBtn" class="btn" style="margin-top:5px; background-color:#eab308;">+ Constraint</button>
+    </div>
+
+    <label style="margin-top:15px;">Constraints List:</label>
+    <div id="bcListContainer">
+        </div>
+
+    <hr/>
+    <label for="iterationsInput">Optimization Iterations:</label>
+    <input type="number" id="iterationsInput" class="config-input" value="30" min="0" step="1">
+    
+    <label for="stressInput">L1 Stress Allowable:</label>
+    <input type="number" id="stressInput" class="config-input" value="2.2" step="0.01">
+    
+    <hr/>
+    <input type="file" id="fileInput" accept=".yaml, .yml" />
+    <div id="instructions">Load a .yaml file to begin.</div>
+    <div id="objectInfo">Click a shape or force to edit.</div>
+    <button id="downloadBtn" class="btn" disabled>Download Modified Config (.yaml)</button>
+</div>
+
+<canvas id="renderCanvas"></canvas>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babylonjs/6.16.0/babylon.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babylonjs-gui/6.16.0/babylonjs.gui.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/js-yaml/4.1.0/js-yaml.min.js"></script>
+<script>
+    const HEADER_TEXT = `# FILE: .\\configs\\default.yaml
+# ==============================================================================
+# HEXA FEM TOPOLOGY OPTIMIZATION CONFIGURATION
+# ==============================================================================`;
+
+    const YAML_SCHEMA_ORDER = [
+        "restart_configuration", "geometry", "boundary_conditions", 
+        "external_forces", "material", "number_of_iterations",
+        "l1_stress_allowable", "optimization_parameters", 
+        "output_settings", "solver_parameters", "growth_settings"
+    ];
+
+    const YAML_HEADERS = {
+        "restart_configuration": "# ------------------------------------------------------------------------------\n# 0. RESTART CONFIGURATION\n# ------------------------------------------------------------------------------",
+        "geometry": "# ------------------------------------------------------------------------------\n# 1. GEOMETRY DEFINITION\n# ------------------------------------------------------------------------------",
+        "boundary_conditions": "# ------------------------------------------------------------------------------\n# 2. BOUNDARY CONDITIONS\n# ------------------------------------------------------------------------------",
+        "external_forces": "# ------------------------------------------------------------------------------\n# 3. EXTERNAL FORCES\n# ------------------------------------------------------------------------------",
+        "material": "# ------------------------------------------------------------------------------\n# 4. MATERIAL PROPERTIES\n# ------------------------------------------------------------------------------",
+        "optimization_parameters": "# ------------------------------------------------------------------------------\n# 5. OPTIMIZATION SETTINGS\n# ------------------------------------------------------------------------------",
+        "output_settings": "# ------------------------------------------------------------------------------\n# 6. OUTPUT SETTINGS\n# ------------------------------------------------------------------------------",
+        "solver_parameters": "# ------------------------------------------------------------------------------\n# 7. SOLVER PARAMETERS\n# ------------------------------------------------------------------------------",
+        "growth_settings": "# ------------------------------------------------------------------------------\n# 8. GROWTH & HARDWARE SETTINGS\n# ------------------------------------------------------------------------------"
+    };
+
+    const YAML_COMMENTS = {
+        "geometry": { "target_elem_count": "# Initial element count." },
+        "material": { "delta_temperature": "# Thermoelasticity." }
+    };
+
+    // UI ELEMENTS
+    const objectInfoDiv = document.getElementById("objectInfo");
+    const downloadBtn = document.getElementById("downloadBtn");
+    const iterationsInput = document.getElementById('iterationsInput');
+    const stressInput = document.getElementById('stressInput');
+    const addSphereBtn = document.getElementById('addSphereBtn');
+    const addBoxBtn = document.getElementById('addBoxBtn');
+    const addBCBtn = document.getElementById('addBCBtn');
+    const bcListContainer = document.getElementById('bcListContainer');
+    const domainX = document.getElementById('domainX');
+    const domainY = document.getElementById('domainY');
+    const domainZ = document.getElementById('domainZ');
+
+    // MODAL ELEMENTS
+    const modalBackdrop = document.getElementById("modalBackdrop");
+    const shapeModal = document.getElementById("shapeModal");
+    const forceModal = document.getElementById("forceModal");
+    const bcModal = document.getElementById("bcModal");
+    const arrayModal = document.getElementById("arrayModal");
+
+    // SHAPE INPUTS
+    const editMeshName = document.getElementById("editMeshName");
+    const editX = document.getElementById("editX");
+    const editY = document.getElementById("editY");
+    const editZ = document.getElementById("editZ");
+    const editStiffness = document.getElementById("editStiffness");
+    const editDiameter = document.getElementById("editDiameter");
+    const editSizeX = document.getElementById("editSizeX");
+    const editSizeY = document.getElementById("editSizeY");
+    const editSizeZ = document.getElementById("editSizeZ");
+    const saveShapeBtn = document.getElementById("saveShapeBtn");
+    const cancelShapeBtn = document.getElementById("cancelShapeBtn");
+
+    // FORCE INPUTS
+    const editForceIndex = document.getElementById("editForceIndex");
+    const forceX = document.getElementById("forceX");
+    const forceY = document.getElementById("forceY");
+    const forceZ = document.getElementById("forceZ");
+    const forceFx = document.getElementById("forceFx");
+    const forceFy = document.getElementById("forceFy");
+    const forceFz = document.getElementById("forceFz");
+    const saveForceBtn = document.getElementById("saveForceBtn");
+    const cancelForceBtn = document.getElementById("cancelForceBtn");
+
+    // BC INPUTS
+    const editBCIndex = document.getElementById("editBCIndex");
+    const bcX = document.getElementById("bcX");
+    const bcY = document.getElementById("bcY");
+    const bcZ = document.getElementById("bcZ");
+    const bcDof1 = document.getElementById("bcDof1");
+    const bcDof2 = document.getElementById("bcDof2");
+    const bcDof3 = document.getElementById("bcDof3");
+    const saveBCBtn = document.getElementById("saveBCBtn");
+    const cancelBCBtn = document.getElementById("cancelBCBtn");
+
+    // ARRAY INPUTS
+    const arraySourceMeshName = document.getElementById("arraySourceMeshName");
+    const arrayDx = document.getElementById("arrayDx");
+    const arrayDy = document.getElementById("arrayDy");
+    const arrayDz = document.getElementById("arrayDz");
+    const arrayCount = document.getElementById("arrayCount");
+    const createArrayBtn = document.getElementById("createArrayBtn");
+    const cancelArrayBtn = document.getElementById("cancelArrayBtn");
+
+    // 3D SCENE
+    var canvas = document.getElementById("renderCanvas");
+    var engine = new BABYLON.Engine(canvas, true);
+    var scene = new BABYLON.Scene(engine);
+    scene.useRightHandedSystem = true; // STRICT RIGHT HANDED SYSTEM
+
+    var camera = new BABYLON.ArcRotateCamera("Camera", -Math.PI/2, Math.PI/2.5, 50, BABYLON.Vector3.Zero(), scene);
+    camera.attachControl(canvas, true);
+    camera.wheelPrecision = 50; 
+    var light = new BABYLON.HemisphericLight("light", new BABYLON.Vector3(0, 1, 0), scene);
+    light.intensity = 0.7;
+    var gizmoManager = new BABYLON.GizmoManager(scene);
+    gizmoManager.positionGizmoEnabled = true;
+    gizmoManager.attachableMeshes = [];
+    gizmoManager.usePointerToAttachGizmos = false;
+
+    var meshToConfigMap = new Map();
+    var currentConfig = null;
+
+    // DRAGGABLE LOGIC
+    function makeDraggable(elm) {
+        var pos1=0, pos2=0, pos3=0, pos4=0;
+        var header = elm.querySelector(".modal-header");
+        if(header) header.onmousedown = dragMouseDown;
+        function dragMouseDown(e) {
+            e.preventDefault(); pos3 = e.clientX; pos4 = e.clientY;
+            const style = window.getComputedStyle(elm);
+            if(style.transform !== 'none') {
+                const rect = elm.getBoundingClientRect();
+                elm.style.transform = 'none'; elm.style.top = rect.top+'px'; elm.style.left = rect.left+'px';
+            }
+            document.onmouseup = closeDragElement; document.onmousemove = elementDrag;
+        }
+        function elementDrag(e) {
+            e.preventDefault();
+            pos1 = pos3 - e.clientX; pos2 = pos4 - e.clientY;
+            pos3 = e.clientX; pos4 = e.clientY;
+            elm.style.top = (elm.offsetTop - pos2) + "px"; elm.style.left = (elm.offsetLeft - pos1) + "px";
+        }
+        function closeDragElement() { document.onmouseup = null; document.onmousemove = null; }
+    }
+    [shapeModal, forceModal, bcModal, arrayModal].forEach(makeDraggable);
+
+    function resetModalPosition(modal) {
+        modal.style.top = "50%"; modal.style.left = "50%";
+        modal.style.transform = "translate(-50%, -50%)";
+    }
+
+    // 3D UTILS (RHS ADJUSTED)
+    function createCoordinateAxes(size) {
+        ["axisX","axisY","axisZ"].forEach(n => { let m=scene.getMeshByName(n); if(m) m.dispose(); });
+        var axisX = BABYLON.MeshBuilder.CreateLines("axisX", { points: [BABYLON.Vector3.Zero(), new BABYLON.Vector3(size, 0, 0)] }, scene); axisX.color = new BABYLON.Color3(1, 0, 0);
+        var axisY = BABYLON.MeshBuilder.CreateLines("axisY", { points: [BABYLON.Vector3.Zero(), new BABYLON.Vector3(0, size, 0)] }, scene); axisY.color = new BABYLON.Color3(0, 1, 0);
+        var axisZ = BABYLON.MeshBuilder.CreateLines("axisZ", { points: [BABYLON.Vector3.Zero(), new BABYLON.Vector3(0, 0, size)] }, scene); axisZ.color = new BABYLON.Color3(0, 0, 1);
+    }
+
+    function createArrow(name, start, dir, length, color, thickness=0.3) {
+        var shaftLen = length * 0.8, tipLen = length * 0.2;
+        var shaft = BABYLON.MeshBuilder.CreateCylinder(name + "_shaft", {height: shaftLen, diameter: thickness}, scene);
+        shaft.position = start.add(dir.scale(shaftLen / 2));
+        var tip = BABYLON.MeshBuilder.CreateCylinder(name + "_tip", {height: tipLen, diameterTop: 0, diameterBottom: thickness * 2.5}, scene);
+        tip.position = start.add(dir.scale(shaftLen + tipLen / 2));
+        var up = new BABYLON.Vector3(0, 1, 0);
+        var axis = BABYLON.Vector3.Cross(up, dir);
+        var angle = Math.acos(BABYLON.Vector3.Dot(up, dir));
+        if (axis.length() < 1e-5) { if (dir.y < 0) angle = Math.PI; else angle = 0; axis = new BABYLON.Vector3(1,0,0); }
+        var quat = BABYLON.Quaternion.RotationAxis(axis, angle);
+        shaft.rotationQuaternion = quat; tip.rotationQuaternion = quat;
+        var mat = new BABYLON.StandardMaterial(name + "_mat", scene);
+        mat.diffuseColor = color; mat.emissiveColor = color;
+        shaft.material = mat; tip.material = mat;
+        return BABYLON.Mesh.MergeMeshes([shaft, tip], true, true, undefined, false, true);
+    }
+
+    function interpretLocationComponent(spec, cmin, cmax) {
+        if (spec === ":") return null; 
+        if (typeof spec === "number") return spec;
+        if (typeof spec === "string") {
+            const trim = spec.trim();
+            if (trim.endsWith("%")) return cmin + (parseFloat(trim.replace("%",""))/100)*(cmax - cmin);
+            const n = parseFloat(trim); return isNaN(n) ? 0 : n;
+        }
+        return spec; 
+    }
+
+    function expandCoords(spec, min, max, step) {
+        if (spec === ":") {
+            let res = [];
+            for (let v = min; v <= max + 0.001; v += step) res.push(v);
+            return res;
+        }
+        return [interpretLocationComponent(spec, min, max)];
+    }
+
+    // RHS: No Z negation
+    function rebuildDomain(xLen, yLen, zLen) {
+        const old = scene.getMeshByName("Domain"); if(old) old.dispose();
+        const dBox = BABYLON.MeshBuilder.CreateBox("Domain", { width: xLen, height: yLen, depth: zLen }, scene);
+        dBox.position = new BABYLON.Vector3(xLen/2, yLen/2, zLen/2);
+        dBox.isPickable = false;
+        const mat = new BABYLON.StandardMaterial("dMat", scene);
+        mat.diffuseColor = new BABYLON.Color3(1, 1, 0); mat.alpha = 0.1; mat.backFaceCulling = false;
+        dBox.material = mat;
+        createCoordinateAxes(Math.max(xLen, yLen, zLen) * 0.2);
+    }
+
+    // RENDERING LOGIC
+    function clearScene() {
+        scene.meshes.slice().forEach(m => { if(m.name!=="Camera" && m.name!=="light") m.dispose(); });
+        gizmoManager.attachToMesh(null);
+        meshToConfigMap.clear();
+        objectInfoDiv.textContent = "No object selected";
+        bcListContainer.innerHTML = "";
+        downloadBtn.disabled = true;
+    }
+
+    function clearBCsAndForces() {
+        const toDispose = [];
+        scene.meshes.forEach(m => {
+            if (m.name.startsWith("bc_") || m.name.startsWith("bcArrow_") || 
+                m.name.startsWith("Force_") || m.name.startsWith("fLabel") || m.name.startsWith("ForceRoot_")) {
+                toDispose.push(m);
+            }
+        });
+        toDispose.forEach(m => { m.dispose(); meshToConfigMap.delete(m.name); });
+        bcListContainer.innerHTML = ""; // rebuild list on render
+    }
+
+    function renderGeometryMesh(key, shape) {
+        let mesh;
+        // RHS: z is z
+        const pos = new BABYLON.Vector3(shape.center[0], shape.center[1], shape.center[2]);
+        if (shape.type === 'sphere') mesh = BABYLON.MeshBuilder.CreateSphere(key, { diameter: shape.diameter || 1 }, scene);
+        else mesh = BABYLON.MeshBuilder.CreateBox(key, { width: (shape.size?shape.size[0]:shape.side), height: (shape.size?shape.size[1]:shape.side), depth: (shape.size?shape.size[2]:shape.side) }, scene);
+        mesh.position = pos;
+        const mat = new BABYLON.StandardMaterial(key + "Mat", scene);
+        mat.alpha = 0.6;
+        mat.diffuseColor = (shape.stiffness_ratio>0) ? new BABYLON.Color3(0,0,1) : new BABYLON.Color3(1,0,0);
+        mesh.material = mat;
+        meshToConfigMap.set(mesh.name, { key: key, type: shape.type });
+    }
+
+    function renderBCs(config, xLen, yLen, zLen) {
+        if (!config.boundary_conditions) return;
+        const vizStep = Math.max(xLen, yLen, zLen) / 30;
+
+        config.boundary_conditions.forEach((bc, idx) => {
+            // Update Side Panel List
+            const div = document.createElement('div');
+            div.className = 'bc-item';
+            div.innerHTML = `<span>BC ${idx+1}</span> Loc: [${bc.location}]`;
+            div.onclick = () => openBCEditor(idx);
+            bcListContainer.appendChild(div);
+
+            const xs = expandCoords(bc.location[0], 0, xLen, vizStep);
+            const ys = expandCoords(bc.location[1], 0, yLen, vizStep);
+            const zs = expandCoords(bc.location[2], 0, zLen, vizStep);
+
+            xs.forEach((x) => {
+                ys.forEach((y) => {
+                    zs.forEach((z) => {
+                        // RHS: no Z flip
+                        const pos = new BABYLON.Vector3(x, y, z);
+                        const m = BABYLON.MeshBuilder.CreateSphere("bc_" + idx + "_" + Math.random(), {diameter: vizStep * 0.4}, scene);
+                        m.position = pos;
+                        const mat = new BABYLON.StandardMaterial("bcMat", scene);
+                        mat.diffuseColor = new BABYLON.Color3(1, 1, 0); 
+                        m.material = mat;
+                        m.isPickable = true;
+                        
+                        meshToConfigMap.set(m.name, { key: idx, type: 'bc' });
+
+                        if (bc.DoFs) {
+                            bc.DoFs.forEach(dof => {
+                                let dir = BABYLON.Vector3.Zero();
+                                let col = new BABYLON.Color3(1,1,1);
+                                if(dof==1){ dir=new BABYLON.Vector3(1,0,0); col=new BABYLON.Color3(1,0,0); }
+                                if(dof==2){ dir=new BABYLON.Vector3(0,1,0); col=new BABYLON.Color3(0,1,0); }
+                                if(dof==3){ dir=new BABYLON.Vector3(0,0,1); col=new BABYLON.Color3(0,0,1); }
+                                const arrow = createArrow("bcArrow", pos, dir, vizStep * 0.8, col, vizStep*0.08);
+                                arrow.isPickable = false;
+                            });
+                        }
+                    });
+                });
+            });
+        });
+    }
+
+    function renderForces(config, xLen, yLen, zLen) {
+        if (!config.external_forces) return;
+        config.external_forces.forEach((f, idx) => {
+            let fx = interpretLocationComponent(f.location[0], 0, xLen);
+            let fy = interpretLocationComponent(f.location[1], 0, yLen);
+            let fz = interpretLocationComponent(f.location[2], 0, zLen);
+            
+            // RHS: no z flip
+            const targetPos = new BABYLON.Vector3(fx, fy, fz);
+            const forceVec = new BABYLON.Vector3(f.F[0], f.F[1], f.F[2]); 
+            const arrowLen = Math.max(xLen, yLen, zLen) * 0.15;
+            
+            var root = new BABYLON.Mesh("ForceRoot_"+idx, scene);
+            root.position = targetPos;
+            
+            const startPos = forceVec.normalize().scale(-arrowLen);
+            const arrow = createArrow("ForceArrow_"+idx, startPos, forceVec.normalize(), arrowLen, new BABYLON.Color3(0.5, 0, 0.5), arrowLen * 0.05);
+            arrow.parent = root; arrow.isPickable = true;
+
+            meshToConfigMap.set(arrow.name, { key: idx, type: 'force', rootName: root.name });
+            meshToConfigMap.set(root.name, { key: idx, type: 'force', rootName: root.name });
+
+            var dt = new BABYLON.DynamicTexture("fText", {width: 256, height: 128}, scene);
+            dt.hasAlpha = true; dt.drawText((f.name || `F${idx}`), null, 80, "bold 40px Arial", "white", "transparent");
+            var plane = BABYLON.MeshBuilder.CreatePlane("fLabel", {width: arrowLen, height: arrowLen/2}, scene);
+            plane.position = startPos.subtract(forceVec.normalize().scale(arrowLen*0.2)); 
+            plane.parent = root; plane.billboardMode = BABYLON.Mesh.BILLBOARDMODE_ALL;
+            var pMat = new BABYLON.StandardMaterial("pMat", scene);
+            pMat.diffuseTexture = dt; 
+            // Fix text mirroring in RHS
+            pMat.diffuseTexture.uScale = -1;
+            pMat.diffuseTexture.uOffset = 1;
+            pMat.emissiveColor = new BABYLON.Color3(1,1,1); pMat.disableLighting = true;
+            plane.material = pMat; plane.isPickable = false;
+        });
+    }
+
+    function buildScene(config) {
+        clearScene();
+        currentConfig = JSON.parse(JSON.stringify(config));
+        
+        // Defaults if missing
+        if(!currentConfig.boundary_conditions) currentConfig.boundary_conditions = [];
+        
+        iterationsInput.value = currentConfig.number_of_iterations || 30;
+        stressInput.value = currentConfig.l1_stress_allowable || 2.2;
+        downloadBtn.disabled = false;
+
+        const g = config.geometry;
+        const xLen = g.length_x || 60, yLen = g.length_y || 20, zLen = g.length_z || 20;
+        domainX.value = xLen; domainY.value = yLen; domainZ.value = zLen;
+        rebuildDomain(xLen, yLen, zLen);
+        camera.target = new BABYLON.Vector3(xLen/2, yLen/2, zLen/2); // RHS
+        camera.radius = Math.max(xLen, yLen, zLen) * 2.0;
+
+        Object.keys(g).forEach(key => {
+            if (['length_x','length_y','length_z','target_elem_count'].includes(key)) return;
+            const shape = g[key];
+            if (!shape || !shape.type) return;
+            renderGeometryMesh(key, shape);
+        });
+
+        renderBCs(config, xLen, yLen, zLen);
+        renderForces(config, xLen, yLen, zLen);
+    }
+
+    // STATE UPDATES (RHS)
+    function updateConfigFromScene() {
+        if (!currentConfig) return null;
+        const dX = parseFloat(domainX.value)||10, dY = parseFloat(domainY.value)||10, dZ = parseFloat(domainZ.value)||10;
+        currentConfig.geometry.length_x = dX; currentConfig.geometry.length_y = dY; currentConfig.geometry.length_z = dZ;
+
+        scene.meshes.forEach(m => {
+            const info = meshToConfigMap.get(m.name);
+            if (info) {
+                if (info.type === 'force' && m.name.startsWith("ForceRoot_")) {
+                    const f = currentConfig.external_forces[info.key];
+                    // RHS: No Z flip
+                    f.location = [parseFloat(m.position.x.toFixed(2)), parseFloat(m.position.y.toFixed(2)), parseFloat(m.position.z.toFixed(2))];
+                } else if (info.type !== 'force' && info.type !== 'bc') {
+                    const c = currentConfig.geometry[info.key];
+                    // RHS: No Z flip
+                    if(c) c.center = [parseFloat(m.position.x.toFixed(2)), parseFloat(m.position.y.toFixed(2)), parseFloat(m.position.z.toFixed(2))];
+                }
+            }
+        });
+        currentConfig.number_of_iterations = parseInt(iterationsInput.value);
+        currentConfig.l1_stress_allowable = parseFloat(stressInput.value);
+        return currentConfig;
+    }
+
+    function onDomainChange() {
+        const x = parseFloat(domainX.value)||10, y = parseFloat(domainY.value)||10, z = parseFloat(domainZ.value)||10;
+        if (currentConfig && currentConfig.geometry) {
+            currentConfig.geometry.length_x = x; currentConfig.geometry.length_y = y; currentConfig.geometry.length_z = z;
+        }
+        rebuildDomain(x, y, z);
+        clearBCsAndForces();
+        renderBCs(currentConfig, x, y, z);
+        renderForces(currentConfig, x, y, z);
+    }
+
+    // ACTIONS
+    function getUniqueKey(prefix) {
+        if (!currentConfig.geometry) return prefix+"1";
+        let i = 1; while (currentConfig.geometry[prefix+i]) i++; return prefix+i;
+    }
+
+    function addNewShape(type) {
+        if (!currentConfig) { alert("Load YAML first."); return; }
+        const center = [currentConfig.geometry.length_x/2, currentConfig.geometry.length_y/2, currentConfig.geometry.length_z/2];
+        let newKey = (type === 'sphere') ? getUniqueKey("sphere") : getUniqueKey("box");
+        let newShape = (type === 'sphere') ? { type: 'sphere', center: center, diameter: 5, stiffness_ratio: 1 } : { type: 'box', center: center, size: [5, 5, 5], stiffness_ratio: 1 };
+        currentConfig.geometry[newKey] = newShape;
+        renderGeometryMesh(newKey, newShape);
+    }
+
+    function addBC() {
+        if (!currentConfig) return;
+        if (!currentConfig.boundary_conditions) currentConfig.boundary_conditions = [];
+        // Default new BC at origin, fixed all
+        currentConfig.boundary_conditions.push({ location: [0, 0, 0], DoFs: [1, 2, 3] });
+        onDomainChange(); // Re-render
+    }
+
+    function deleteObject(meshName) {
+        const info = meshToConfigMap.get(meshName);
+        if (!info || !currentConfig) return;
+
+        if (info.type === 'force') {
+            currentConfig.external_forces.splice(info.key, 1);
+            onDomainChange(); 
+        } else if (info.type === 'bc') {
+            currentConfig.boundary_conditions.splice(info.key, 1);
+            onDomainChange(); 
+        } else {
+            delete currentConfig.geometry[info.key];
+            const mesh = scene.getMeshByName(meshName);
+            if (mesh) mesh.dispose();
+            meshToConfigMap.delete(meshName);
+        }
+        gizmoManager.attachToMesh(null);
+        objectInfoDiv.textContent = "No object selected";
+    }
+
+    // MODAL OPENING
+    function openEditor(meshName) {
+        const info = meshToConfigMap.get(meshName);
+        if (!info) return;
+
+        if (info.type === 'force') {
+            const idx = info.key;
+            editForceMeshName.value = meshName;
+            const f = currentConfig.external_forces[idx];
+            resetModalPosition(forceModal);
+            editForceIndex.value = idx;
+            forceX.value = Array.isArray(f.location)?f.location[0]:0;
+            forceY.value = Array.isArray(f.location)?f.location[1]:0;
+            forceZ.value = Array.isArray(f.location)?f.location[2]:0;
+            forceFx.value = f.F[0]; forceFy.value = f.F[1]; forceFz.value = f.F[2];
+            modalBackdrop.style.display = 'block'; forceModal.style.display = 'block';
+        } else if (info.type === 'bc') {
+            openBCEditor(info.key);
+        } else {
+            const configData = currentConfig.geometry[info.key];
+            resetModalPosition(shapeModal);
+            editMeshName.value = meshName;
+            editX.value = configData.center[0]; editY.value = configData.center[1]; editZ.value = configData.center[2];
+            editStiffness.value = configData.stiffness_ratio||0;
+            if (info.type === 'sphere') {
+                sphereInputs.style.display = 'block'; boxInputs.style.display = 'none'; editDiameter.value = configData.diameter;
+            } else {
+                sphereInputs.style.display = 'none'; boxInputs.style.display = 'block';
+                if(Array.isArray(configData.size)) { editSizeX.value=configData.size[0]; editSizeY.value=configData.size[1]; editSizeZ.value=configData.size[2]; }
+                else { editSizeX.value=configData.side||1; editSizeY.value=configData.side||1; editSizeZ.value=configData.side||1; }
+            }
+            modalBackdrop.style.display = 'block'; shapeModal.style.display = 'block';
+        }
+        gizmoManager.attachToMesh(null);
+    }
+
+    function openBCEditor(idx) {
+        const bc = currentConfig.boundary_conditions[idx];
+        resetModalPosition(bcModal);
+        editBCIndex.value = idx;
+        bcX.value = bc.location[0]; bcY.value = bc.location[1]; bcZ.value = bc.location[2];
+        
+        // Handle DoFs Checkboxes
+        const dofs = bc.DoFs || [];
+        bcDof1.checked = dofs.includes(1);
+        bcDof2.checked = dofs.includes(2);
+        bcDof3.checked = dofs.includes(3);
+
+        modalBackdrop.style.display = 'block'; bcModal.style.display = 'block';
+    }
+
+    function closeModal() {
+        modalBackdrop.style.display = 'none';
+        shapeModal.style.display = 'none'; forceModal.style.display = 'none'; bcModal.style.display = 'none'; arrayModal.style.display = 'none';
+    }
+
+    // SAVE HANDLERS
+    saveShapeBtn.addEventListener('click', () => {
+        const info = meshToConfigMap.get(editMeshName.value);
+        if (!info) return;
+        const cd = currentConfig.geometry[info.key];
+        cd.center = [parseFloat(editX.value), parseFloat(editY.value), parseFloat(editZ.value)];
+        cd.stiffness_ratio = parseFloat(editStiffness.value);
+        if (info.type === 'sphere') cd.diameter = parseFloat(editDiameter.value);
+        else { cd.size = [parseFloat(editSizeX.value), parseFloat(editSizeY.value), parseFloat(editSizeZ.value)]; delete cd.side; }
+        const m = scene.getMeshByName(editMeshName.value); if(m) m.dispose(); meshToConfigMap.delete(editMeshName.value);
+        renderGeometryMesh(info.key, cd);
+        updateConfigFromScene(); closeModal();
+    });
+
+    saveForceBtn.addEventListener('click', () => {
+        const idx = parseInt(editForceIndex.value);
+        const f = currentConfig.external_forces[idx];
+        const p = (v) => { v=String(v).trim(); return v.endsWith("%")?v:((parseFloat(v))||0); };
+        f.location = [p(forceX.value), p(forceY.value), p(forceZ.value)];
+        f.F = [parseFloat(forceFx.value), parseFloat(forceFy.value), parseFloat(forceFz.value)];
+        onDomainChange(); closeModal();
+    });
+
+    saveBCBtn.addEventListener('click', () => {
+        const idx = parseInt(editBCIndex.value);
+        const bc = currentConfig.boundary_conditions[idx];
+        const p = (v) => { v=String(v).trim(); return (v===':'||v.endsWith("%"))?v:((parseFloat(v))||0); };
+        
+        bc.location = [p(bcX.value), p(bcY.value), p(bcZ.value)];
+        
+        let dofs = [];
+        if(bcDof1.checked) dofs.push(1);
+        if(bcDof2.checked) dofs.push(2);
+        if(bcDof3.checked) dofs.push(3);
+        bc.DoFs = dofs;
+
+        onDomainChange(); closeModal();
+    });
+
+    cancelShapeBtn.onclick = closeModal; cancelForceBtn.onclick = closeModal; cancelBCBtn.onclick = closeModal;
+
+    // ARRAY
+    function openArrayModal(meshName) {
+        const info = meshToConfigMap.get(meshName);
+        if (!info || (info.type!=='sphere' && info.type!=='box' && info.type!=='force')) { alert("Arrays not supported."); return; }
+        arraySourceMeshName.value = meshName;
+        resetModalPosition(arrayModal); modalBackdrop.style.display = 'block'; arrayModal.style.display = 'block';
+        gizmoManager.attachToMesh(null);
+    }
+    createArrayBtn.onclick = () => {
+        const info = meshToConfigMap.get(arraySourceMeshName.value);
+        const count = parseInt(arrayCount.value);
+        const dx = parseFloat(arrayDx.value), dy = parseFloat(arrayDy.value), dz = parseFloat(arrayDz.value);
+
+        if (info.type === 'force') {
+            const src = currentConfig.external_forces[info.key];
+            const lx = currentConfig.geometry.length_x;
+            const ly = currentConfig.geometry.length_y;
+            const lz = currentConfig.geometry.length_z;
+            const getAbs = (val, max) => {
+                if(typeof val === 'string' && val.trim().endsWith('%')) { return (parseFloat(val)/100) * max; }
+                return val;
+            };
+            const sx = getAbs(src.location[0], lx);
+            const sy = getAbs(src.location[1], ly);
+            const sz = getAbs(src.location[2], lz);
+
+            for(let i=1; i<=count; i++) {
+                let nf = JSON.parse(JSON.stringify(src));
+                nf.location = [sx + (dx * i), sy + (dy * i), sz + (dz * i)];
+                currentConfig.external_forces.push(nf);
+            }
+            onDomainChange();
+        } else {
+            const src = currentConfig.geometry[info.key];
+            for (let i=1; i<=count; i++) {
+                let ns = JSON.parse(JSON.stringify(src));
+                ns.center[0] += (dx*i); ns.center[1] += (dy*i); ns.center[2] += (dz*i);
+                const k = getUniqueKey(info.type);
+                currentConfig.geometry[k] = ns;
+                renderGeometryMesh(k, ns);
+            }
+        }
+        closeModal();
+    };
+    cancelArrayBtn.onclick = closeModal;
+
+    // DOWNLOAD
+    downloadBtn.onclick = () => {
+        const up = updateConfigFromScene();
+        if(!up) return;
+        const ord = {};
+        YAML_SCHEMA_ORDER.forEach(k => { if(up[k]!==undefined) ord[k] = up[k]; });
+        let yaml = jsyaml.dump(ord, { indent: 2, lineWidth: -1, sortKeys: false });
+        
+        // Fix formatting
+        yaml = yaml.replace(/(location|center|size|F):\s*\n\s+-\s+([^\n]+)\n\s+-\s+([^\n]+)\n\s+-\s+([^\n]+)/g, "$1: [$2, $3, $4]");
+        
+        // Correct vector replacement for DoFs order
+        // 1. Check for 3 items
+        yaml = yaml.replace(/DoFs:\s*\n\s+-\s+([^\n]+)\n\s+-\s+([^\n]+)\n\s+-\s+([^\n]+)/g, "DoFs: [$1, $2, $3]");
+        // 2. Check for 2 items
+        yaml = yaml.replace(/DoFs:\s*\n\s+-\s+([^\n]+)\n\s+-\s+([^\n]+)/g, "DoFs: [$1, $2]");
+        // 3. Check for 1 item
+        yaml = yaml.replace(/DoFs:\s*\n\s+-\s+([^\n]+)/g, "DoFs: [$1]");
+        // 4. Check for empty
+        yaml = yaml.replace(/DoFs: \[\]/g, "DoFs: []");
+
+        let lines = yaml.split('\n'), newLines = [HEADER_TEXT, ""];
+        for(let l of lines) {
+            let t = l.trim();
+            for(let s in YAML_HEADERS) if(t.startsWith(s+":")) { newLines.push(""); newLines.push(YAML_HEADERS[s]); }
+            if(t.startsWith("target_elem_count:")) l += " # Initial element count.";
+            newLines.push(l);
+        }
+        saveAs(new Blob([newLines.join('\n')], {type: "application/x-yaml"}), "modified_config.yaml");
+    };
+
+    // DOM LISTENERS
+    domainX.onchange = onDomainChange; domainY.onchange = onDomainChange; domainZ.onchange = onDomainChange;
+    addSphereBtn.onclick = () => addNewShape('sphere');
+    addBoxBtn.onclick = () => addNewShape('box');
+    addBCBtn.onclick = addBC;
+
+    document.getElementById("fileInput").onchange = (e) => {
+        if(e.target.files[0]) {
+            let r = new FileReader();
+            r.onload = (ev) => { try { buildScene(jsyaml.load(ev.target.result)); document.getElementById("instructions").innerHTML="<b>File Loaded!</b>"; } catch(x){alert(x);} };
+            r.readAsText(e.target.files[0]);
+        }
+    };
+
+    // SELECTION & INTERACTION
+    function updateSelectionPanel(mesh) {
+        const info = meshToConfigMap.get(mesh.name);
+        if (!info || !currentConfig) return;
+        let h = "";
+        if (info.type === 'force') {
+            const f = currentConfig.external_forces[info.key];
+            const p = mesh.position;
+            // RHS: p.z is p.z
+            h = `<b>Force ${info.key}</b><br>Loc: [${p.x.toFixed(1)}, ${p.y.toFixed(1)}, ${p.z.toFixed(1)}]<br>F: [${f.F}]`;
+        } else if (info.type === 'bc') {
+            const bc = currentConfig.boundary_conditions[info.key];
+            h = `<b>Constraint ${info.key+1}</b><br>Loc: [${bc.location}]<br>DoFs: [${bc.DoFs}]`;
+        } else {
+            const d = currentConfig.geometry[info.key];
+            const p = mesh.position;
+            // RHS: p.z is p.z
+            h = `<b>${info.key}</b><br>Loc: [${p.x.toFixed(1)}, ${p.y.toFixed(1)}, ${p.z.toFixed(1)}]`;
+        }
+        
+        h += `<br><div class='btn-row'>`;
+        h += `<button class='btn btn-secondary' onclick='openEditor("${mesh.name}")'>Edit</button>`;
+        if(info.type!=='force' && info.type!=='bc') h += `<button class='btn btn-secondary' onclick='openArrayModal("${mesh.name}")'>Array</button>`;
+        // Allow array for forces now
+        if(info.type === 'force') h += `<button class='btn btn-secondary' onclick='openArrayModal("${mesh.name}")'>Array</button>`;
+        h += `<button class='btn btn-danger' onclick='deleteObject("${mesh.name}")'>Delete</button>`;
+        h += `</div>`;
+        objectInfoDiv.innerHTML = h;
+    }
+
+    scene.onPointerDown = function(evt, pickResult) {
+        if (pickResult.hit && pickResult.pickedMesh && meshToConfigMap.has(pickResult.pickedMesh.name)) {
+            const info = meshToConfigMap.get(pickResult.pickedMesh.name);
+            let target = pickResult.pickedMesh;
+            if (info.type === 'force' && info.rootName) target = scene.getMeshByName(info.rootName);
+            
+            // Gizmos only for Shapes and Force Roots. BC spheres are not draggable via Gizmo (abstract location).
+            if (info.type === 'bc') gizmoManager.attachToMesh(null);
+            else gizmoManager.attachToMesh(target);
+            
+            updateSelectionPanel(target);
+        } else {
+            gizmoManager.attachToMesh(null);
+            objectInfoDiv.textContent = "No object selected";
+        }
+    };
+
+    let draggingObserver = null;
+    if (gizmoManager.gizmos.positionGizmo) {
+        gizmoManager.gizmos.positionGizmo.onDragStartObservable.add(() => {
+            draggingObserver = scene.onBeforeRenderObservable.add(() => {
+                if (gizmoManager.gizmos.positionGizmo.attachedMesh) updateSelectionPanel(gizmoManager.gizmos.positionGizmo.attachedMesh);
+            });
+        });
+        gizmoManager.gizmos.positionGizmo.onDragEndObservable.add(() => {
+            if (draggingObserver) { scene.onBeforeRenderObservable.remove(draggingObserver); draggingObserver = null; }
+            updateConfigFromScene();
+        });
+    }
+
+    engine.runRenderLoop(() => scene.render());
+    window.addEventListener("resize", () => engine.resize());
+    window.openEditor = openEditor; window.deleteObject = deleteObject; window.openArrayModal = openArrayModal; window.openBCEditor = openBCEditor;
+
+</script>
+</body>
+</html>

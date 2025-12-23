@@ -1,0 +1,297 @@
+# FILE: .\configs\default.yaml
+# ==============================================================================
+# HEXA FEM TOPOLOGY OPTIMIZATION CONFIGURATION
+# ==============================================================================
+# This configuration file controls the behavior of the HEXA GPU-accelerated 
+# topology optimizer. It covers hardware tuning, physics definitions, 
+# optimization constraints, and output formatting.
+
+# ------------------------------------------------------------------------------
+# 1. HARDWARE PROFILE
+# ------------------------------------------------------------------------------
+# Controls how the solver utilizes GPU resources and numerical precision.
+# Options:
+#   "RTX"   : For consumer GPUs (RTX 3090/4090). Uses Float32, safer memory limits.
+#   "V100"  : For Tesla V100. Uses Float64 (Double Precision), optimized memory.
+#   "A100"  : For Ampere Data Center. High VRAM limits, Float64.
+#   "H100"  : For Hopper Data Center. Max VRAM limits (80GB+), Float64, tighter tolerances.
+#   "AUTO"  : Attempts to detect the GPU and select the best profile.
+gpu_profile: "RTX"
+
+# ------------------------------------------------------------------------------
+# 2. RESTART CONFIGURATION
+# ------------------------------------------------------------------------------
+# Allows the simulation to resume from a binary checkpoint file (.bintop).
+restart_configuration:
+  # Set to 'true' to load the state from 'file_path'.
+  enable_restart: false
+  
+  # Path to the .bintop file generated in the RESULTS directory (e.g., "iter_50_webdata.bintop")
+  file_path: ""
+
+# ------------------------------------------------------------------------------
+# 3. GEOMETRY DEFINITION
+# ------------------------------------------------------------------------------
+# Defines the background finite element mesh and any initial non-design regions.
+geometry:
+  # Physical dimensions of the bounding box (in meters or consistent units).
+  length_x: 60
+  length_y: 20
+  length_z: 20
+  
+  # The solver will attempt to create a grid approximating this total number 
+  # of elements (background grid). 
+  # Note: The solver may refine beyond this if 'growth_settings' allow it.
+  target_elem_count: 1_500_000
+  
+  # Geometric primitives to modify the initial domain.
+  # These regions become "Protected" (Non-Design) meaning the optimizer 
+  # cannot change their density.
+  #
+  # Stiffness Ratio Logic:
+  #   0    : VOID. Forces a hole.
+  #   > 0  : SOLID inclusion. Density = ratio. (e.g., 1.0 = Base Material, 10.0 = Stiffener).
+  #   < 0  : PASSIVE THERMAL. Density = abs(ratio), but enables Thermal Expansion (alpha=1).
+  
+  sphere1:
+    type: sphere
+    center: [12.51, 28.49, 50]
+    diameter: 8
+    stiffness_ratio: 0   # Creates a hole
+    
+  sphere2:
+    type: sphere
+    center: [60.38, -0.07, 50]
+    diameter: 4
+    stiffness_ratio: 10  # Stiffer inclusion (Non-Design)
+    
+  sphere3:
+    type: sphere
+    center: [34.29, 5, 50]
+    diameter: 4
+    stiffness_ratio: -10 # Passive material with thermal expansion enabled
+      
+  box1:
+    type: box
+    center: [28, 15, 50]
+    size: [1, 2, 3]      # [Length_X, Length_Y, Length_Z]
+    stiffness_ratio: 5
+      
+  box2:
+    type: box
+    center: [45.06, 8.95, 50]
+    size: [1, 4, 2]
+    stiffness_ratio: 0   # Creates a void box
+
+# ------------------------------------------------------------------------------
+# 4. BOUNDARY CONDITIONS
+# ------------------------------------------------------------------------------
+# Fixes nodes in space.
+boundary_conditions:
+  # location: [x, y, z]
+  #   Values can be:
+  #     Number (e.g., 0) : Exact coordinate match (within tolerance).
+  #     ":"              : All nodes along this axis.
+  #     "100%"           : The maximum coordinate along this axis.
+  #     "50%"            : The midpoint.
+  # DoFs: [1, 2, 3] -> 1=X, 2=Y, 3=Z fixed.
+  - location: [0, ':', ':'] # Fix X=0 face
+    DoFs: [1, 2, 3]         # Fully fixed (Encastre)
+
+# ------------------------------------------------------------------------------
+# 5. EXTERNAL FORCES
+# ------------------------------------------------------------------------------
+# Applies point loads to specific locations.
+external_forces:
+  - name: Y10
+    location: [100%, 0, 0] # At X=Max, Y=0, Z=0
+    F: [0, 10, 0]          # Force Vector [Fx, Fy, Fz]
+    
+  - name: Z-10
+    location: [100%, 0, 50%]
+    F: [0, 0, -10]
+    
+  - name: Y20
+    location: [100%, 0, 100%]
+    F: [0, 20, 0]
+    
+  - name: Mid_Y20
+    location: [50%, 0, 50%]
+    F: [0, 15, 0]
+
+# ------------------------------------------------------------------------------
+# 6. MATERIAL PROPERTIES
+# ------------------------------------------------------------------------------
+# Linear elastic isotropic material properties.
+material:
+  E: 1                      # Young's Modulus
+  nu: 0.3                   # Poisson's Ratio
+  material_density: 0.001   # Used only if gravity_acceleration > 0
+  gravity_acceleration: 0.0 
+  delta_temperature: 0.0    # Applies thermal strain if non-zero
+
+# ------------------------------------------------------------------------------
+# 7. OPTIMIZATION SETTINGS
+# ------------------------------------------------------------------------------
+# Controls the main Topology Optimization loop.
+# Schedule: "Nominal" phase (iterations 1 to N) -> "Annealing" phase (extra 30%).
+
+number_of_iterations: 100
+hard_stop_after_iteration: 250  # Force exit even if not converged.
+l1_stress_allowable: 1.5          # Target stress for the optimization criterion.
+
+optimization_parameters:
+  # Method to update element densities after FEA solve.
+  # "soft" : Standard SIMP. Elements can be gray (0.0 < rho < 1.0).
+  # "hard" : Discrete. Forces elements to be either VOID or SOLID (1.0) after every step.
+  density_update_method: "hard"
+
+  min_density: 0.0001             # The "Void" density (prevents singular matrix).
+  density_clamp_max: 1            # Max physical density (usually 1.0).
+  
+  # Elements below this density are candidates for removal (culling).
+  # This follows a linear ramp schedule: 0 -> final_density_threshold.
+  final_density_threshold: 0.90
+
+  # === NEW PARAMETER ===
+  # Controls the speed of the cutoff threshold rise.
+  # 1.0 = Linear (Standard)
+  # 0.5 = Fast start (Square root curve) - Clears weak elements early
+  # 2.0 = Slow start (Quadratic curve) - Keeps mesh fuller for longer (Better for detail)
+  exponent_for_cutoff_schedule: 1.5 
+  # ============================================================================
+  # MATHEMATICALLY COUPLED RADIUS-THRESHOLD SCHEDULE
+  # ============================================================================
+  # Theory: Ensures rho_peak = width / (2*r) > threshold
+  # Constraint: tau * radius <= C * d_min
+  
+  # 1. Feature Size Definition (Physical Target vs. Stability Floor)
+  # ----------------------------------------------------------------
+  # The effective minimum feature size (d_min) is determined as:
+  # d_min = MAX( minimum_feature_size_physical,  minimum_feature_size_elements * dx )
+  
+  # Target Physical Size (Meters):
+  # Set this to your desired strut thickness. e.g., 0.5 
+  # If 0.0, the logic relies entirely on the element floor (Mesh Dependent).
+  minimum_feature_size_physical: 0.1
+
+  # Numerical Stability Floor (Elements):
+  # This acts as an absolute minimum to prevent checkerboarding.
+  # Even if you request a tiny physical size, the filter radius will never
+  # drop below this multiplier of the element size.
+  # Recommended: 2.0 - 3.0
+  minimum_feature_size_elements: 1.0
+
+  # 2. Radius Baseline Schedule (Hyperbolic Decay)
+  # r_baseline(t) = r_max * (1 - t^gamma) + r_min
+  # These multipliers now apply to the effective d_min calculated above.
+  radius_max_multiplier: 1.0      # r_max = 4.0 * d_min (Start very smooth)
+  radius_min_multiplier: 1      # r_min = 0.5 * d_min (End sharp)
+  radius_decay_exponent: 1.8      # gamma: Higher = faster decay early on
+
+  # 3. Constraint Coupling
+  # Safety constant C. Recommended range: 0.20 (Safe) to 0.35 (Aggressive).
+  constraint_constant: 0.25
+
+  # Max percentage of elements to delete in a single iteration (stability).
+  max_culling_ratio: 0.2
+
+# ------------------------------------------------------------------------------
+# 8. OUTPUT SETTINGS
+# ------------------------------------------------------------------------------
+output_settings:
+  export_frequency: 1       # How often (iters) to write logs/results.
+  save_bin_frequency: 1     # Frequency for restart binary files.
+  save_STL_frequency: 10     # Frequency for Isosurface STLs.
+  save_VTK_frequency: 1     # Frequency for ParaView .vti/.vtu files.
+  
+  save_principal_stress_vectors: no # "yes" exports vector field (heavy I/O).
+  log_filename: simulation_log.txt
+  
+  # Density threshold to extract the STL isosurface (usually 0.1 - 0.5).
+  iso_surface_threshold: 0.01
+  
+  # STL Quality Settings (Higher = smoother but massive files).
+  stl_subdivision_level: 2       # 1 = fast, 2 = smooth.
+  stl_smoothing_passes: 2        # Grid smoothing before marching cubes.
+  stl_mesh_smoothing_iters: 6    # Laplacian smoothing on the final mesh.
+
+
+  # Mesh Smoothing (Post-Marching Cubes)
+  # Controls the Taubin or Laplace smoothing on the triangles
+  smoothing_settings:
+    type: "taubin"      # Options: "taubin" (volume preserving) or "laplace" (shrinking)
+    iterations: 10      # Number of smoothing steps
+    lambda: 0.5         # Smoothing factor (0 < lambda < 1)
+    mu: -0.53           # Taubin expansion factor (only used if type is "taubin", must be negative)
+
+
+  # Downsampling for Web/Visualization binary output.
+  # If active elements > this, the output is strided to fit. 0 = disable.
+  maximum_cells_in_binary_output: 25_000_000
+
+  # Decimation target for STL files.
+  # Reduces triangle count to this number to make CAD import easier.
+  stl_target_triangle_count: 95000
+
+# ------------------------------------------------------------------------------
+# 9. SOLVER PARAMETERS
+# ------------------------------------------------------------------------------
+# Controls the Linear System Solver (Ku = f).
+solver_parameters:
+  # "gpu"           : Uses custom Matrix-Free CG on GPU (Recommended).
+  # "matrix_free" : CPU-based Matrix-Free CG.
+  # "direct"        : CPU-based LU Decomposition (Only for small meshes < 100k).
+  solver_type: gpu              
+  
+  # "multigrid"     : Geometric Multigrid V-Cycle (Fastest on GPU).
+  # "jacobi"        : Diagonal scaling (Fallback if MG fails).
+  preconditioner: "multigrid"
+  
+  # Convergence tolerance for the linear solver (residual norm).
+  # For H100/Float64, use 1.0e-9. For RTX/Float32, use 1.0e-6.
+  tolerance: 1.e-6 
+  
+  max_iterations: 30000 
+  
+  # Numeric stability shift. Added to diagonal if matrix is singular.
+  diagonal_shift_factor: 1.e-7 
+
+  # If relative residual improvement is below this, solver stops early.
+  stagnation_tolerance: 1.0e-3
+  
+  # Robustness settings for singular matrices (floating parts).
+  max_shift_attempts: 7
+  shift_multiplier: 10.0
+  
+  gpu_method: krylov        
+  krylov_solver: cg             
+
+# ------------------------------------------------------------------------------
+# 10. GROWTH SETTINGS
+# ------------------------------------------------------------------------------
+# Controls the dynamic Adaptive Mesh Refinement (AMR).
+growth_settings:
+  # The optimizer will refine the mesh until this many SOLID elements exist.
+  # This allows starting coarse and getting fine details on the structure.
+  target_active_elements: 50_000_000
+  
+  # Max multiplier for element count increase per refinement step.
+  # e.g., 1.25 means mesh grows by max 25% at a time.
+  max_growth_rate: 1.1
+  
+  # If active_elements < (target * this_threshold), refinement is triggered.
+  nominal_refinement_threshold: 0.9
+
+  # Exponent for refinement schedule:
+  # 1.0 = Linear growth (constant acceleration)
+  # 2.0 = Quadratic growth (start slow, fast finish) - Default
+  exponent_for_refinement_schedule: 2.0
+  
+  # Hard cap on the background grid size (Air + Solid).
+  # Prevents RAM explosion if the domain is mostly empty.
+  max_background_elements: 500_000_000
+  
+  # Memory safety factors (0.0 - 1.0).
+  # Lower values are safer but utilize less VRAM.
+  gpu_solver_safety_factor: 0.95

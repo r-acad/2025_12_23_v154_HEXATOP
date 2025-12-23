@@ -1,0 +1,199 @@
+╔═══════════════════════════════════════════════════════════════╗
+║  COUPLED FILTER SCHEDULE (Iter 92) [PHYSICAL TARGET]
+╟───────────────────────────────────────────────────────────────╢
+║  Avg Element Size:         0.0889 m
+║  Requested Physical:       0.5000 m
+║  Stability Floor:          0.1779 m (2.0 elems)
+╟───────────────────────────────────────────────────────────────╢
+║  Effective d_min:          0.5000 m (5.6 elems)
+║  Radius (Final):           0.3527 m (4.0 elems) [CONSTRAINED]
+╟───────────────────────────────────────────────────────────────╢
+║  Cutoff Exponent:          1.20
+║  Constraint Margin:        0.0%  [CRITICAL]
+╚═══════════════════════════════════════════════════════════════╝
+
+    [ExplicitFilter] Radius=0.353, Steps=10, dt=5.72e-02, Slabs=1 (Unclamped Diffusion)
+    [ExplicitFilter] R=0.353, Slabs=1/1 (Skipped 0 Empty), Time=0.54s
+
+| Iter |  Mesh Size  | Total El | Active El |  Radius  |  Cutoff  | Compliance | Strain Energy | Avg L1 Stress | Vol Frac | Delta Rho | Refine? | Residual | Preconditioner | Iter Time | Wall Time | VRAM |
+|   92 | 674x225x225 | 3.41e+07 |  1.59e+07 |   0.3527 |    0.354 |   6.23e+04 |      3.12e+04 |      8.86e-01 |    0.317 |   17.11% | Refined | 4.75e-07 | GMG_GPU        |  00:09:55 |  00:55:20 |  7.6G |
+    -> Exporting results...
+      > Writing Checkpoint/Web Binary... done (1.109s)
+      > Writing VTK (Paraview)... done (0.870s)
+      > Writing Isosurface STL...Generated structured mesh: 34121250 elements, 34476300 nodes.
+ [WARN] Mesh too large for decimation (10326908 tris). Skipping to preserve performance.
+ done (55.043s)
+
+============================================================
+>>> [MESH REFINER] Evaluating Refinement Strategy (Detail Preserving)
+    Current Total Elements:  34121250
+    Current Active Elements: 10180351 (29.84%)
+    Target Active Limit:     11751056
+    Constraint Analysis:
+      - Target Active Limit: 6.603 GiB approx (35447171 elems)
+      - Growth Rate Limit: 7.627 GiB approx (40945500 elems)
+      - Config Hard Limit: 93.132 GiB approx (500000000 elems)
+    LIMIT APPLIED: Target Active Limit
+    [SKIP] Calculated growth too small (< 5%). Skipping.
+============================================================
+
+    -> FEA Solve (Iter 93)
+   [Solver] Strict Tol: 1.0e-06
+   [Solver] Pruning DISABLED (Required for Geometric Multigrid).
+
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+>>> [MEMORY GUARD] VRAM DEFICIT DETECTED
+   Active Elements: 9.709 MiB
+----------------------------------------
+   Estimated Req:   6.16 GB
+   Reported Free:   2.44 GB
+----------------------------------------
+   [OVERRIDE] SAFEGUARDS DISABLED. PROCEEDING UNTIL CRASH.
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+
+================================================================================
+                   GPU SOLVER (ATOMIC) [Topo Opt Iter: 93]
+================================================================================
+  Nodes: 34476300 | Elems: 34121250 | Free DOFs: 103275672
+  Pre-Alloc VRAM: 2.44 GB Free / 10.00 GB Total
+  [MG Init] Multigrid Levels Initialized Successfully:
+    Lv 1 (Fine): 674x225x225
+    Lv 2 (Med):  337x112x112
+    Lv 3 (Cst):  168x56x56
+  Preconditioner: Geometric Multigrid (V-Cycle)
+
+  >>> ATTEMPT 1 | Shift: 1.7e-08
+      Iter          Res       RelRes      Alpha       Beta    Time(s)      Clock
+         1   1.6571e+00   5.7694e-02   8.74e-01   0.00e+00      0.139   00:56:21
+       500   2.2460e-02   7.8194e-04   1.01e+00   1.02e+00     30.996   00:56:52
+      1000   2.3180e-02   8.0701e-04   8.72e-01   1.05e+00     61.779   00:57:23
+      1500   2.3840e-02   8.2999e-04   1.08e+00   9.89e-01     92.437   00:57:53
+      2000   1.0014e-02   3.4864e-04   1.05e+00   9.98e-01    123.207   00:58:24
+      2500   4.8968e-03   1.7048e-04   1.04e+00   1.00e+00    154.196   00:58:55
+      3000   2.3261e-03   8.0985e-05   1.06e+00   9.80e-01    185.067   00:59:26
+      3500   1.2724e-03   4.4299e-05   1.10e+00   9.89e-01    215.939   00:59:57
+      4000   9.1692e-04   3.1923e-05   1.02e+00   9.79e-01    246.794   01:00:28
+      4500   7.5261e-04   2.6203e-05   1.10e+00   9.94e-01    277.628   01:00:59
+      5000   4.8299e-04   1.6816e-05   9.50e-01   9.40e-01    308.514   01:01:29
+      5500   4.0272e-04   1.4021e-05   1.06e+00   9.95e-01    339.369   01:02:00
+      6000   2.5347e-04   8.8248e-06   1.12e+00   9.98e-01    370.226   01:02:31
+      6500   1.6714e-04   5.8191e-06   9.56e-01   1.04e+00    401.049   01:03:02
+      7000   1.2969e-04   4.5152e-06   1.01e+00   9.76e-01    431.814   01:03:33
+      7500   5.7601e-05   2.0054e-06   1.12e+00   9.79e-01    462.720   01:04:04
+      8000   4.3273e-05   1.5066e-06   1.03e+00   1.01e+00    493.404   01:04:34
+--------------------------------------------------------------------------------
+    -> Calculating Stress Field...
+   [Stress] CPU Mode: 3.70 GB required > 2.44 GB available (75% threshold)
+    -> Topology Update & Filtering...
+
+╔═══════════════════════════════════════════════════════════════╗
+║  COUPLED FILTER SCHEDULE (Iter 93) [PHYSICAL TARGET]
+╟───────────────────────────────────────────────────────────────╢
+║  Avg Element Size:         0.0889 m
+║  Requested Physical:       0.5000 m
+║  Stability Floor:          0.1779 m (2.0 elems)
+╟───────────────────────────────────────────────────────────────╢
+║  Effective d_min:          0.5000 m (5.6 elems)
+║  Radius (Final):           0.3481 m (3.9 elems) [CONSTRAINED]
+╟───────────────────────────────────────────────────────────────╢
+║  Cutoff Exponent:          1.20
+║  Constraint Margin:        0.0%  [CRITICAL]
+╚═══════════════════════════════════════════════════════════════╝
+
+    [ExplicitFilter] Radius=0.348, Steps=10, dt=5.87e-02, Slabs=1 (Unclamped Diffusion)
+    [ExplicitFilter] R=0.348, Slabs=1/1 (Skipped 0 Empty), Time=0.51s
+
+| Iter |  Mesh Size  | Total El | Active El |  Radius  |  Cutoff  | Compliance | Strain Energy | Avg L1 Stress | Vol Frac | Delta Rho | Refine? | Residual | Preconditioner | Iter Time | Wall Time | VRAM |
+|   93 | 674x225x225 | 3.41e+07 |  1.02e+07 |   0.3481 |    0.359 |   6.26e+04 |      3.13e+04 |      9.22e-01 |    0.298 |   15.60% |    Skip | 5.64e-07 | GMG_GPU        |  00:09:48 |  01:06:06 |  7.6G |
+    -> Exporting results...
+      > Writing Checkpoint/Web Binary... done (1.012s)
+      > Writing VTK (Paraview)... done (0.876s)
+      > Writing Isosurface STL...Generated structured mesh: 34121250 elements, 34476300 nodes.
+ [WARN] Mesh too large for decimation (10209368 tris). Skipping to preserve performance.
+ done (55.710s)
+
+============================================================
+>>> [MESH REFINER] Evaluating Refinement Strategy (Detail Preserving)
+    Current Total Elements:  34121250
+    Current Active Elements: 9668421 (28.34%)
+    Target Active Limit:     11975436
+    Constraint Analysis:
+      - Target Active Limit: 7.085 GiB approx (38036734 elems)
+      - Growth Rate Limit: 7.627 GiB approx (40945500 elems)
+      - Config Hard Limit: 93.132 GiB approx (500000000 elems)
+    LIMIT APPLIED: Target Active Limit
+    >>> EXECUTING REFINEMENT TO: 38036734 elements
+      > Grid: 700x233x233 = 38002300
+      > Res:  0.08571429 x 0.08583691 x 0.08583691
+Generated structured mesh: 38002300 elements, 38383956 nodes.
+      > Mapping density and thermal fields (Sharpened Trilinear)...
+    [DONE] Refinement Complete (With Detail Preservation).
+============================================================
+
+    -> [Refinement] Re-mapping Boundary Conditions & Forces...
+Processing 4 external forces...
+   -> Force 'Y10': mapped to 1 nodes
+   -> Force 'Z-10': mapped to nearest node #19192679
+   -> Force 'Y20': mapped to 1 nodes
+   -> Force 'Mid_Y20': mapped to nearest node #19192329
+
+================================================================================
+>>> [GEOMETRY] Initializing Density Field
+================================================================================
+  Total Elements: 38002300
+  Number of Shapes: 5
+  Min Density Floor: 0.0001
+  [Timing] Field allocation: 35.0ms
+Processing geometric density and thermal modifiers...
+  [Optimization] Computed 38002300 element centroids (0.15s)
+  [Optimization] Element density and thermal processing complete (0.17s)
+                 Processed 38002300 elements with 5 shapes
+                 Throughput: 227.56M elements/sec
+  [Timing] Geometric processing: 0.17s
+           Throughput: 227.56M elements/sec
+  [Timing] Statistics computation: 71.0ms
+
+  Element Classification:
+    Designable:        38002300 (100.0%)
+    Protected Total:   0 (0.0%)
+      ├─ Voids:         0
+      ├─ Stiff:         0
+      └─ Passive:       0
+================================================================================
+
+    -> [Refinement] Resetting solution guess.
+    -> FEA Solve (Iter 94)
+   [Solver] Strict Tol: 1.0e-06
+   [Solver] Pruning DISABLED (Required for Geometric Multigrid).
+  [GPU Memory] Releasing Stale Solver Cache to free VRAM...
+
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+>>> [MEMORY GUARD] VRAM DEFICIT DETECTED
+   Active Elements: 18.307 MiB
+----------------------------------------
+   Estimated Req:   7.15 GB
+   Reported Free:   7.00 GB
+----------------------------------------
+   [OVERRIDE] SAFEGUARDS DISABLED. PROCEEDING UNTIL CRASH.
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+
+================================================================================
+                   GPU SOLVER (ATOMIC) [Topo Opt Iter: 94]
+================================================================================
+  Nodes: 38383956 | Elems: 38002300 | Free DOFs: 114987600
+  Pre-Alloc VRAM: 7.00 GB Free / 10.00 GB Total
+Generated structured mesh: 4709600 elements, 4804839 nodes.
+Generated structured mesh: 588700 elements, 612656 nodes.
+  [MG Init] Multigrid Levels Initialized Successfully:
+    Lv 1 (Fine): 700x233x233
+    Lv 2 (Med):  350x116x116
+    Lv 3 (Cst):  175x58x58
+  Preconditioner: Geometric Multigrid (V-Cycle)
+
+  >>> ATTEMPT 1 | Shift: 1.6e-08
+      Iter          Res       RelRes      Alpha       Beta    Time(s)      Clock
+         1   2.8261e+01   9.8392e-01   9.96e-01   0.00e+00     28.203   01:09:27
+       500   7.4365e-01   2.5890e-02   1.10e+00   1.02e+00  11705.114   04:24:04
+      1000   7.8116e-01   2.7197e-02   1.14e+00   9.87e-01  23424.339   07:39:23
